@@ -1,0 +1,50 @@
+﻿name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'VibeCoding/STOCK/**'
+
+env:
+  GCP_PROJECT_ID: project-842398be-a4d4-405f-afa
+  GCP_REGION: asia-northeast1
+  SERVICE_NAME: stock-app
+  IMAGE_NAME: stock-app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker for GCP
+        run: gcloud auth configure-docker gcr.io
+
+      - name: Build Docker image
+        run: |
+          docker build -t gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -t gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest VibeCoding/STOCK/
+
+      - name: Push Docker image
+        run: |
+          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} --image gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --region ${{ env.GCP_REGION }} --platform managed --allow-unauthenticated --memory 512Mi --cpu 1 --timeout 300 --set-env-vars NODE_ENV=production --port 8080
+
+      - name: Get deployment URL
+        run: |
+          gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.GCP_REGION }} --format 'value(status.url)'
