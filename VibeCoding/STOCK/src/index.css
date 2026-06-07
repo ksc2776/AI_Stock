@@ -1263,10 +1263,23 @@ body::before {
   .search-bar-container, .search-input, .card, .glass-card, .theme-news, .theme-stock-item {
     max-width: 100% !important;
     box-sizing: border-box !important;
+    min-width: 0 !important;
   }
 
   .theme-content { flex-direction: column !important; }
 
   img, video, canvas, svg { max-width: 100% !important; height: auto !important; display: block; }
+
+  /* Foldable / landscape narrow-height tweaks */
+  @media (orientation: landscape) {
+    .app-container { padding-left: calc(12px + env(safe-area-inset-left)); padding-right: calc(12px + env(safe-area-inset-right)); }
+    .search-bar-container, .search-input { width: 100% !important; max-width: 100% !important; }
+    .dashboard-grid { grid-template-columns: 1fr !important; }
+    .card, .glass-card { padding-left: var(--space-md) !important; padding-right: var(--space-md) !important; box-sizing: border-box; }
+    .theme-content { flex-direction: column !important; }
+    .ts-ticker, .ts-price, .ts-change { width: auto !important; }
+    /* Reduce large chunk padding/margins that can cause overflow */
+    .app-header, .app-subtitle { padding-left: 0 !important; padding-right: 0 !important; }
+  }
 }
 
