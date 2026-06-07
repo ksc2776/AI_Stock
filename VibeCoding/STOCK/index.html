@@ -21,5 +21,41 @@
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
+  <script>
+    // Auto-scale page to fit narrow/folded viewports (Galaxy Fold fixes)
+    (function(){
+      function fitScale(){
+        var container = document.querySelector('.app-container') || document.getElementById('root');
+        if(!container) return;
+        // reset previous
+        container.style.transformOrigin = 'left top';
+        container.style.transform = '';
+        document.body.style.height = '';
+
+        // measure content width
+        var contentWidth = Math.max(container.scrollWidth || 0, container.offsetWidth || 0);
+        var vw = window.innerWidth || document.documentElement.clientWidth;
+        if(contentWidth > vw){
+          var scale = vw / contentWidth;
+          // clamp scale to reasonable range
+          if(scale < 0.6) scale = 0.6;
+          container.style.transform = 'scale(' + scale + ')';
+          // maintain layout height to avoid cropping
+          var rect = container.getBoundingClientRect();
+          document.body.style.height = Math.ceil(rect.height * scale) + 'px';
+        } else {
+          container.style.transform = '';
+          document.body.style.height = '';
+        }
+      }
+      window.addEventListener('resize', fitScale);
+      window.addEventListener('orientationchange', function(){ setTimeout(fitScale,200); });
+      document.addEventListener('DOMContentLoaded', function(){ setTimeout(fitScale,120); });
+      // run early in case SPA mounts later
+      setTimeout(fitScale, 500);
+      // also poll briefly for dynamic layout changes
+      var polls = 0; var pollId = setInterval(function(){ fitScale(); if(++polls>6) clearInterval(pollId); }, 400);
+    })();
+  </script>
 </body>
 </html>
