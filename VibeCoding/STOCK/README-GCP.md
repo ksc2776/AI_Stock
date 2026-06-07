@@ -266,3 +266,5 @@ A: 네, Cloud SQL, Firestore, BigQuery 등을 연결할 수 있습니다.
 
 **마지막 업데이트**: 2026년 6월 7일
 **작성자**: AI Assistant (Copilot CLI)
+
+Deployment trigger: 2026-06-07T20:04:59+09:00
