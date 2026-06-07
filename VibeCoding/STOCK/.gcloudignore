@@ -1,0 +1,27 @@
+# Files to ignore during Google Cloud Build
+node_modules/
+.git
+.gitignore
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+yarn-debug.log*
+.env
+.env.local
+.env.*.local
+.DS_Store
+Thumbs.db
+test_*.js
+test.js
+fn_test.html
+fnguide.html
+실시간_분석리포트.xlsx
+antigravity/
+scripts/
+release/
+dist/
+build/
+.cache
+.parcel-cache
+README-*.md

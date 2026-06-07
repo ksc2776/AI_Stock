@@ -1,0 +1,60 @@
+# Google Cloud Build 자동 배포 설정
+# GitHub 푸시 시 자동으로 트리거되어 Cloud Run에 배포됨
+
+steps:
+  # Step 1: Docker 이미지 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/stock-app:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/stock-app:latest'
+      - '-f'
+      - 'VibeCoding/STOCK/Dockerfile'
+      - 'VibeCoding/STOCK'
+    id: 'build-image'
+
+  # Step 2: Docker 이미지를 Google Container Registry에 푸시
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/stock-app:$SHORT_SHA'
+    id: 'push-image'
+
+  # Step 3: Cloud Run에 배포
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'stock-app'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/stock-app:$SHORT_SHA'
+      - '--region'
+      - 'asia-northeast1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '300'
+      - '--port'
+      - '8080'
+      - '--set-env-vars'
+      - 'NODE_ENV=production'
+
+# 이미지 저장소
+images:
+  - 'gcr.io/$PROJECT_ID/stock-app:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/stock-app:latest'
+
+# 빌드 타임아웃 (60분)
+timeout: 3600s
+
+# 완료 후 메시지
+onSuccess:
+  - 'echo "배포 완료! https://stock-app-[HASH].run.app 에서 접근 가능"'
