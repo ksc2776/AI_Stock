@@ -12,7 +12,7 @@ app.get('/api/analyze', analyzeRoute);
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // 어떤 경로로 접속하든 index.html로 리다이렉트 (React Router 지원)
-app.get('*', (req, res) => {
+app.get('/*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
