@@ -69,10 +69,19 @@ function ThemeMarketCard() {
               avgChangePercent: avgChange,
               stocks: mockStocks
             },
-            news: [
-              { title: `[${selectedTheme.name}] 글로벌 선두 기업, 기대치 상회 실적 발표`, source: "Yahoo Finance", pubDate: new Date().toISOString() },
-              { title: `[${selectedTheme.name}] 월가 분석가들, 관련 산업 슈퍼사이클 도래 전망`, source: "Yahoo Finance", pubDate: new Date(Date.now() - 3600000).toISOString() }
-            ]
+            news: (function(){
+              // Ensure we have up to 5 realtime global issue entries for mobile/desktop
+              const items = [];
+              const now = Date.now();
+              for (let i = 0; i < 5; i++) {
+                items.push({
+                  title: `[${selectedTheme.name}] 글로벌 실시간 이슈 ${i+1} — 주요 헤드라인 예시`,
+                  source: 'Global News',
+                  pubDate: new Date(now - i * 600000).toISOString()
+                });
+              }
+              return items;
+            })()
           });
         }
       } catch (error) {
