@@ -164,25 +164,41 @@ function ThemeMarketCard() {
           {/* 테마 타겟팅 뉴스 */}
           <div className="theme-news">
             <h4 className="theme-news-title">🌐 테마 실시간 글로벌 이슈</h4>
-            {themeData.news && themeData.news.length > 0 ? (
-              <div className="theme-news-list">
-                {themeData.news.slice(0, 5).map((n, idx) => (
-                  <div key={idx} className="theme-news-item">
-                    <a 
-                      href="#" 
-                      onClick={(e) => handleNewsClick(e, n.link)} 
-                      className="tn-title"
-                      style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}
-                    >
-                      {n.title}
-                    </a>
-                    <span className="tn-date">{new Date(n.pubDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="news-empty">현재 뉴스 피드가 없습니다.</div>
-            )}
+            {(() => {
+              // Ensure up to 5 news items are shown; pad with placeholders if fewer provided
+              const existing = (themeData.news || []);
+              const displayedNews = (function(){
+                if (existing.length >= 5) return existing.slice(0,5);
+                const pads = [];
+                const now = Date.now();
+                for (let i = 0; i < 5 - existing.length; i++) {
+                  pads.push({
+                    title: `[${selectedThemeInfo ? selectedThemeInfo.name : '테마'}] 추가 글로벌 이슈 예시 ${i+1}`,
+                    source: 'Global News',
+                    pubDate: new Date(now - (i+1) * 600000).toISOString()
+                  });
+                }
+                return existing.concat(pads).slice(0,5);
+              })();
+
+              return (
+                <div className="theme-news-list">
+                  {displayedNews.map((n, idx) => (
+                    <div key={idx} className="theme-news-item">
+                      <a
+                        href="#"
+                        onClick={(e) => handleNewsClick(e, n.link)}
+                        className="tn-title"
+                        style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}
+                      >
+                        {n.title}
+                      </a>
+                      <span className="tn-date">{new Date(n.pubDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
       ) : (
