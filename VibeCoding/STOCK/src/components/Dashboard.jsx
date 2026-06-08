@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PriceCard from './cards/PriceCard';
 import VolumeCard from './cards/VolumeCard';
 import SupplyDemandCard from './cards/SupplyDemandCard';
@@ -51,6 +51,19 @@ function Dashboard({ data }) {
     }
   };
 
+  // 모바일(<=820px)에서 강제 DOM 순서 적용 (CSS 번들 미포함 시 안전장치)
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    function update() { setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 820); }
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, []);
+
   return (
     <div>
       {/* 리포트 헤더 */}
@@ -85,42 +98,42 @@ function Dashboard({ data }) {
         {/* Note: wrapper classes added for mobile reorder */}
 
         {/* IssueNotice (news) */}
-        <div className="card-role-issueNotice animate-slide-up animate-delay-1" style={{ gridColumn: 'span 1' }}>
+        <div className="card-role-issueNotice animate-slide-up animate-delay-1" style={{ gridColumn: 'span 1', order: isMobile ? 7 : undefined }}>
           <IssueNoticeCard data={data.news} stockName={data.price.name} />
         </div>
 
         {/* Theme / GICS */}
-        <div className="card-role-themeMarket animate-slide-up animate-delay-2" style={{ gridColumn: 'span 2' }}>
+        <div className="card-role-themeMarket animate-slide-up animate-delay-2" style={{ gridColumn: 'span 2', order: isMobile ? 6 : undefined }}>
           <ThemeMarketCard />
         </div>
 
         {/* Price (wide) */}
-        <div className="card-role-price card-wide animate-slide-up animate-delay-3">
+        <div className="card-role-price card-wide animate-slide-up animate-delay-3" style={{ order: isMobile ? 3 : undefined }}>
           <PriceCard data={data.price} stockName={data.price.name} />
         </div>
 
         {/* Volume */}
-        <div className="card-role-volume animate-slide-up animate-delay-4">
+        <div className="card-role-volume animate-slide-up animate-delay-4" style={{ order: isMobile ? 5 : undefined }}>
           <VolumeCard data={data.price} stockName={data.price.name} />
         </div>
 
         {/* Supply / Investors */}
-        <div className="card-role-supply animate-slide-up animate-delay-5">
+        <div className="card-role-supply animate-slide-up animate-delay-5" style={{ order: isMobile ? 4 : undefined }}>
           <SupplyDemandCard data={data.investors} stockName={data.price.name} />
         </div>
 
         {/* S-RIM */}
-        <div className="card-role-srim animate-slide-up animate-delay-6">
+        <div className="card-role-srim animate-slide-up animate-delay-6" style={{ order: isMobile ? 2 : undefined }}>
           <SrimCard data={data.srim} currentPrice={data.price.current} stockName={data.price.name} />
         </div>
 
         {/* Action Plan (매매 가이드&목표) */}
-        <div className="card-role-action animate-slide-up animate-delay-7">
+        <div className="card-role-action animate-slide-up animate-delay-7" style={{ order: isMobile ? 1 : undefined }}>
           <ActionPlanCard data={data.actionPlan} currentPrice={data.price.current} stockName={data.price.name} />
         </div>
 
         {/* Consensus (full width) */}
-        <div className="card-role-consensus card-full animate-slide-up animate-delay-8">
+        <div className="card-role-consensus card-full animate-slide-up animate-delay-8" style={{ order: isMobile ? 8 : undefined }}>
           <ConsensusCard data={data.financials} srim={data.srim} analystReport={data.analystReport} stockName={data.price.name} />
         </div>
       </div>
