@@ -33,11 +33,25 @@ function SearchBar({ onSearch }) {
     const lowerValue = value.toLowerCase();
     
     // 종목명 또는 종목코드 매칭 (최대 10개)
-    const filtered = koreaStocks.filter(stock => 
-      stock.name.toLowerCase().includes(lowerValue) || 
-      stock.code.includes(lowerValue)
-    ).slice(0, 10);
+    let filtered = koreaStocks.filter(stock => 
+      (stock.name && stock.name.toLowerCase().includes(lowerValue)) || 
+      (stock.code && stock.code.includes(lowerValue))
+    );
 
+    // 추가 매칭: 공백/특수문자 제거 후 비교, 부분 매칭 허용
+    if (filtered.length === 0) {
+      const qNoSpace = lowerValue.replace(/\s+/g, '');
+      filtered = koreaStocks.filter(stock => {
+        const name = (stock.name || '').toLowerCase();
+        const nameNoSpace = name.replace(/\s+/g, '');
+        // NFC 정규화
+        const normName = name.normalize ? name.normalize('NFC') : name;
+        const normQuery = qNoSpace.normalize ? qNoSpace.normalize('NFC') : qNoSpace;
+        return nameNoSpace.includes(normQuery) || normName.includes(lowerValue);
+      });
+    }
+
+    filtered = filtered.slice(0, 10);
     setResults(filtered);
     setIsOpen(true);
   };
