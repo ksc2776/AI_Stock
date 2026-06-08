@@ -841,6 +841,14 @@ body::before {
   .card-full { width: 100% !important; }
   .card-wide { width: 100% !important; }
   .app-container { padding-left: 16px !important; padding-right: 16px !important; }
+
+  /* Ensure theme news shows up to 5 items and is not height-clipped on mobile */
+  .theme-news, .theme-news-list {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .theme-news-list { display: flex !important; flex-direction: column !important; gap: 10px !important; }
+  .theme-news-item { padding-bottom: 8px !important; border-bottom: 1px dashed rgba(255,255,255,0.05) !important; }
 }
 
 @media (max-width: 1200px) {
