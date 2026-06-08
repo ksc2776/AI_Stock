@@ -64,6 +64,48 @@ function Dashboard({ data }) {
     };
   }, []);
 
+  // 모바일(단일 컬럼) 전용 렌더링: isMobile === true이면 DOM 순서를 명확히 하여 1열로 쌓음
+  const renderMobileColumn = () => (
+    <div className="mobile-single-column">
+      <div className="card animate-slide-up animate-delay-1">
+        <h3 className="card-title">📊 {data.price.name} 실시간 분석 리포트</h3>
+        <p className="report-timestamp">분석 시점: {data.analyzedAt}</p>
+      </div>
+
+      <div className="card animate-slide-up animate-delay-2">
+        <ActionPlanCard data={data.actionPlan} currentPrice={data.price.current} stockName={data.price.name} />
+      </div>
+
+      <div className="card animate-slide-up animate-delay-3">
+        <SrimCard data={data.srim} currentPrice={data.price.current} stockName={data.price.name} />
+      </div>
+
+      <div className="card animate-slide-up animate-delay-4">
+        <PriceCard data={data.price} stockName={data.price.name} />
+      </div>
+
+      <div className="card animate-slide-up animate-delay-5">
+        <SupplyDemandCard data={data.investors} stockName={data.price.name} />
+      </div>
+
+      <div className="card animate-slide-up animate-delay-6">
+        <VolumeCard data={data.price} stockName={data.price.name} />
+      </div>
+
+      <div className="card animate-slide-up animate-delay-7">
+        <ThemeMarketCard />
+      </div>
+
+      <div className="card animate-slide-up animate-delay-8">
+        <IssueNoticeCard data={data.news} stockName={data.price.name} />
+      </div>
+
+      <div className="card animate-slide-up animate-delay-9">
+        <ConsensusCard data={data.financials} srim={data.srim} analystReport={data.analystReport} stockName={data.price.name} />
+      </div>
+    </div>
+  );
+
   return (
     <div>
       {/* 리포트 헤더 */}
@@ -93,50 +135,54 @@ function Dashboard({ data }) {
         </button>
       </div>
 
-      {/* 대시보드 그리드 */}
-      <div className="dashboard-grid">
-        {/* Note: wrapper classes added for mobile reorder */}
+      {/* 모바일이면 단일 컬럼 렌더링, 아니면 기존 그리드 */}
+      {isMobile ? (
+        renderMobileColumn()
+      ) : (
+        <div className="dashboard-grid">
+          {/* Note: wrapper classes added for mobile reorder */}
 
-        {/* IssueNotice (news) */}
-        <div className="card-role-issueNotice animate-slide-up animate-delay-1" style={{ gridColumn: 'span 1', order: isMobile ? 7 : undefined }}>
-          <IssueNoticeCard data={data.news} stockName={data.price.name} />
-        </div>
+          {/* IssueNotice (news) */}
+          <div className="card-role-issueNotice animate-slide-up animate-delay-1" style={{ gridColumn: 'span 1', order: isMobile ? 7 : undefined }}>
+            <IssueNoticeCard data={data.news} stockName={data.price.name} />
+          </div>
 
-        {/* Theme / GICS */}
-        <div className="card-role-themeMarket animate-slide-up animate-delay-2" style={{ gridColumn: 'span 2', order: isMobile ? 6 : undefined }}>
-          <ThemeMarketCard />
-        </div>
+          {/* Theme / GICS */}
+          <div className="card-role-themeMarket animate-slide-up animate-delay-2" style={{ gridColumn: 'span 2', order: isMobile ? 6 : undefined }}>
+            <ThemeMarketCard />
+          </div>
 
-        {/* Price (wide) */}
-        <div className="card-role-price card-wide animate-slide-up animate-delay-3" style={{ order: isMobile ? 3 : undefined }}>
-          <PriceCard data={data.price} stockName={data.price.name} />
-        </div>
+          {/* Price (wide) */}
+          <div className="card-role-price card-wide animate-slide-up animate-delay-3" style={{ order: isMobile ? 3 : undefined }}>
+            <PriceCard data={data.price} stockName={data.price.name} />
+          </div>
 
-        {/* Volume */}
-        <div className="card-role-volume animate-slide-up animate-delay-4" style={{ order: isMobile ? 5 : undefined }}>
-          <VolumeCard data={data.price} stockName={data.price.name} />
-        </div>
+          {/* Volume */}
+          <div className="card-role-volume animate-slide-up animate-delay-4" style={{ order: isMobile ? 5 : undefined }}>
+            <VolumeCard data={data.price} stockName={data.price.name} />
+          </div>
 
-        {/* Supply / Investors */}
-        <div className="card-role-supply animate-slide-up animate-delay-5" style={{ order: isMobile ? 4 : undefined }}>
-          <SupplyDemandCard data={data.investors} stockName={data.price.name} />
-        </div>
+          {/* Supply / Investors */}
+          <div className="card-role-supply animate-slide-up animate-delay-5" style={{ order: isMobile ? 4 : undefined }}>
+            <SupplyDemandCard data={data.investors} stockName={data.price.name} />
+          </div>
 
-        {/* S-RIM */}
-        <div className="card-role-srim animate-slide-up animate-delay-6" style={{ order: isMobile ? 2 : undefined }}>
-          <SrimCard data={data.srim} currentPrice={data.price.current} stockName={data.price.name} />
-        </div>
+          {/* S-RIM */}
+          <div className="card-role-srim animate-slide-up animate-delay-6" style={{ order: isMobile ? 2 : undefined }}>
+            <SrimCard data={data.srim} currentPrice={data.price.current} stockName={data.price.name} />
+          </div>
 
-        {/* Action Plan (매매 가이드&목표) */}
-        <div className="card-role-action animate-slide-up animate-delay-7" style={{ order: isMobile ? 1 : undefined }}>
-          <ActionPlanCard data={data.actionPlan} currentPrice={data.price.current} stockName={data.price.name} />
-        </div>
+          {/* Action Plan (매매 가이드&목표) */}
+          <div className="card-role-action animate-slide-up animate-delay-7" style={{ order: isMobile ? 1 : undefined }}>
+            <ActionPlanCard data={data.actionPlan} currentPrice={data.price.current} stockName={data.price.name} />
+          </div>
 
-        {/* Consensus (full width) */}
-        <div className="card-role-consensus card-full animate-slide-up animate-delay-8" style={{ order: isMobile ? 8 : undefined }}>
-          <ConsensusCard data={data.financials} srim={data.srim} analystReport={data.analystReport} stockName={data.price.name} />
+          {/* Consensus (full width) */}
+          <div className="card-role-consensus card-full animate-slide-up animate-delay-8" style={{ order: isMobile ? 8 : undefined }}>
+            <ConsensusCard data={data.financials} srim={data.srim} analystReport={data.analystReport} stockName={data.price.name} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -823,8 +823,10 @@ body::before {
 /* ===== 반응??===== */
 
 /* Mobile reorder for app view: set explicit order for phone layout (1..8) */
-@media (max-width: 820px) {
+@media (max-width: 920px) {
+  /* Force single-column layout for phone and fold devices */
   .dashboard-grid { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+  .mobile-single-column { display: flex; flex-direction: column; gap: 12px; }
   .card-role-action { order: 1 !important; }
   .card-role-srim { order: 2 !important; }
   .card-role-price { order: 3 !important; }
@@ -835,7 +837,7 @@ body::before {
   .card-role-consensus { order: 8 !important; }
 
   /* ensure each card fills width and spacing suitable for app */
-  .dashboard-grid > div { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+  .dashboard-grid > div, .mobile-single-column > .card { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
   .card-full { width: 100% !important; }
   .card-wide { width: 100% !important; }
   .app-container { padding-left: 16px !important; padding-right: 16px !important; }
