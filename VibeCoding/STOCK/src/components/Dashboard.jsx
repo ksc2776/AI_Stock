@@ -82,35 +82,45 @@ function Dashboard({ data }) {
 
       {/* 대시보드 그리드 */}
       <div className="dashboard-grid">
-        {/* 1행: 종목 이슈(소창) + 미국 테마 + 가격/거래량 */}
-        <div className="animate-slide-up animate-delay-1" style={{ gridColumn: 'span 1' }}>
+        {/* Note: wrapper classes added for mobile reorder */}
+
+        {/* IssueNotice (news) */}
+        <div className="card-role-issueNotice animate-slide-up animate-delay-1" style={{ gridColumn: 'span 1' }}>
           <IssueNoticeCard data={data.news} stockName={data.price.name} />
         </div>
-        <div className="animate-slide-up animate-delay-2" style={{ gridColumn: 'span 2' }}>
+
+        {/* Theme / GICS */}
+        <div className="card-role-themeMarket animate-slide-up animate-delay-2" style={{ gridColumn: 'span 2' }}>
           <ThemeMarketCard />
         </div>
 
-        {/* 2행: 가격(wide) + 거래량 */}
-        <div className="card-wide animate-slide-up animate-delay-3">
+        {/* Price (wide) */}
+        <div className="card-role-price card-wide animate-slide-up animate-delay-3">
           <PriceCard data={data.price} stockName={data.price.name} />
         </div>
-        <div className="animate-slide-up animate-delay-4">
+
+        {/* Volume */}
+        <div className="card-role-volume animate-slide-up animate-delay-4">
           <VolumeCard data={data.price} stockName={data.price.name} />
         </div>
 
-        {/* 3행: 수급 + S-RIM + 액션플랜 */}
-        <div className="animate-slide-up animate-delay-5">
+        {/* Supply / Investors */}
+        <div className="card-role-supply animate-slide-up animate-delay-5">
           <SupplyDemandCard data={data.investors} stockName={data.price.name} />
         </div>
-        <div className="animate-slide-up animate-delay-6">
+
+        {/* S-RIM */}
+        <div className="card-role-srim animate-slide-up animate-delay-6">
           <SrimCard data={data.srim} currentPrice={data.price.current} stockName={data.price.name} />
         </div>
-        <div className="animate-slide-up animate-delay-7">
+
+        {/* Action Plan (매매 가이드&목표) */}
+        <div className="card-role-action animate-slide-up animate-delay-7">
           <ActionPlanCard data={data.actionPlan} currentPrice={data.price.current} stockName={data.price.name} />
         </div>
 
-        {/* 4행: 컨센서스 (full width) */}
-        <div className="card-full animate-slide-up animate-delay-8">
+        {/* Consensus (full width) */}
+        <div className="card-role-consensus card-full animate-slide-up animate-delay-8">
           <ConsensusCard data={data.financials} srim={data.srim} analystReport={data.analystReport} stockName={data.price.name} />
         </div>
       </div>
