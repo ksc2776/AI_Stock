@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function ConsensusCard({ data, srim, analystReport, stockName }) {
@@ -149,11 +149,15 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
               {srim && srim.forwardCalculations && srim.forwardCalculations.length > 0 && (
                 <tr className="forward-srim-row">
                   <td style={{ color: 'var(--accent-blue)', fontWeight: 'bold' }}>추정 적정가 (S-RIM)</td>
-                  {srim.forwardCalculations.map((f, i) => (
-                    <td key={i} style={{ color: 'var(--accent-blue)', fontWeight: 'bold' }}>
-                      {f.fairValue?.toLocaleString('ko-KR') || '-'}원
-                    </td>
-                  ))}
+                  {consensus.years.map((y, i) => {
+                    const cleanYear = y.replace('(E)', '').replace('(P)', '');
+                    const calc = srim.forwardCalculations.find(f => f.year.replace('(E)', '').replace('(P)', '') === cleanYear);
+                    return (
+                      <td key={i} style={{ color: 'var(--accent-blue)', fontWeight: 'bold' }}>
+                        {calc && calc.fairValue ? `${calc.fairValue.toLocaleString('ko-KR')}원` : '-'}
+                      </td>
+                    );
+                  })}
                 </tr>
               )}
             </tbody>
@@ -173,7 +177,13 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
                   tick={{ fill: '#94a3b8', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(v) => (v / 10000).toFixed(0) + '조'}
+                  domain={['auto', 'auto']}
+                  tickFormatter={(v) => {
+                    if (v >= 10000) {
+                      return (v / 10000).toFixed(1).replace('.0', '') + '조';
+                    }
+                    return v.toLocaleString('ko-KR') + '억';
+                  }}
                 />
                 <Tooltip
                   formatter={(value, name) => [value.toLocaleString('ko-KR') + '억', name]}

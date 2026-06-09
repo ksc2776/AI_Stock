@@ -1,6 +1,21 @@
 import React from 'react';
 
 function IssueNoticeCard({ data, stockName }) {
+  const handleItemClick = (e, news) => {
+    e.preventDefault();
+    if (!news.link) return;
+    
+    const detailText = news.detail || `[출처: ${news.source} | 작성일: ${news.date || '최근'}]\n\n본 실시간 종목 뉴스 및 공시의 상세 요약본이 없거나 제공되지 않았습니다. 상세 원문을 확인하시려면 하단의 원본 기사 보러가기 링크를 이용해 주세요.`;
+    
+    // news.html로 전달할 쿼리 파라미터 구성
+    const newsUrl = `/news.html?type=issue` +
+      `&title=${encodeURIComponent(news.title)}` +
+      `&detail=${encodeURIComponent(detailText)}` +
+      `&link=${encodeURIComponent(news.link)}`;
+    
+    window.open(newsUrl, '_blank', 'noopener,noreferrer');
+  };
+
   if (!data || data.length === 0) {
     return (
       <div className="card glass-card">
@@ -22,11 +37,7 @@ function IssueNoticeCard({ data, stockName }) {
               animationDelay: `${index * 0.1}s`,
               cursor: news.link ? 'pointer' : 'default'
             }}
-            onClick={() => {
-              if (news.link && window.electronAPI) {
-                window.electronAPI.openExternalLink(news.link);
-              }
-            }}
+            onClick={(e) => handleItemClick(e, news)}
           >
             <div className="news-content">
               <p className="news-title" style={{ color: news.link ? 'var(--accent-blue)' : 'var(--text-primary)' }}>
@@ -45,3 +56,4 @@ function IssueNoticeCard({ data, stockName }) {
 }
 
 export default IssueNoticeCard;
+

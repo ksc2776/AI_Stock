@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이슈 및 공지 상세 보기</title>
+  <!-- Pretendard 웹폰트 적용으로 세련된 타이포그래피 구현 -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 0%, #1a1e2e 0%, #0c0e14 100%);
+      color: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      overflow-x: hidden;
+    }
+
+    /* 글래스모피즘 컨테이너 */
+    .container {
+      width: 100%;
+      max-width: 640px;
+      background: rgba(30, 41, 59, 0.45);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 32px 28px; /* 우측 여백을 28px로 주어 글자 잘림 방지 */
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* 배지 스타일 */
+    .badge-wrapper {
+      display: flex;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 50px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge.issue {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+    }
+
+    .badge.notice {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.25);
+    }
+
+    /* 기사 타이틀 */
+    .title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1.4;
+      color: #ffffff;
+      word-break: break-all;
+      overflow-wrap: break-word;
+      border-left: 4px solid #3b82f6;
+      padding-left: 14px;
+    }
+
+    /* 기사 상세 내용 */
+    .detail {
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: #cbd5e1;
+      word-break: break-all;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
+      background: rgba(15, 23, 42, 0.25);
+      padding: 20px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    /* 원본 링크 버튼 */
+    .source-link-container {
+      display: flex;
+      justify-content: flex-start;
+      margin-top: 8px;
+    }
+
+    .source-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #60a5fa;
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s ease, transform 0.2s ease;
+    }
+
+    .source-link:hover {
+      color: #93c5fd;
+      transform: translateX(2px);
+    }
+
+    /* 하단 제어부 (닫기 버튼) */
+    .actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 24px;
+    }
+
+    /* 닫기 버튼: 붉은색 프리미엄 그라데이션 */
+    .close-btn {
+      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+      color: #ffffff;
+      border: none;
+      padding: 14px 40px;
+      font-size: 1.05rem;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .close-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);
+      background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
+    }
+
+    .close-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="badge-wrapper">
+      <span id="badge" class="badge notice">공지사항</span>
+    </div>
+    
+    <h1 id="title" class="title">불러오는 중...</h1>
+    
+    <div id="detail" class="detail">내용을 읽어오고 있습니다.</div>
+    
+    <div id="source-link-container" class="source-link-container" style="display: none;">
+      <a id="source-link" href="#" target="_blank" rel="noopener noreferrer">
+        🔗 원본 기사 보러가기
+      </a>
+    </div>
+    
+    <div class="actions">
+      <button class="close-btn" onclick="closeArticleWindow()">
+        <span>❌ 기사창 닫기</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // URL 파라미터 파싱
+    function getQueryParam(name) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(name);
+    }
+
+    // 문서 로드 시 데이터 적용
+    window.addEventListener('DOMContentLoaded', () => {
+      const type = getQueryParam('type') || 'notice';
+      const title = getQueryParam('title');
+      const detail = getQueryParam('detail');
+      const link = getQueryParam('link');
+
+      // 타입 설정 (이슈/공지)
+      const badgeEl = document.getElementById('badge');
+      if (type === 'issue' || type === 'news') {
+        badgeEl.textContent = '주요 이슈';
+        badgeEl.className = 'badge issue';
+      } else {
+        badgeEl.textContent = '공지사항';
+        badgeEl.className = 'badge notice';
+      }
+
+      // 제목 및 본문 매핑 (디코딩 처리)
+      if (title) {
+        document.getElementById('title').textContent = decodeURIComponent(title);
+        document.title = decodeURIComponent(title) + ' - 이슈 보기';
+      } else {
+        document.getElementById('title').textContent = '상세 정보';
+      }
+
+      if (detail) {
+        document.getElementById('detail').textContent = decodeURIComponent(detail);
+      } else {
+        document.getElementById('detail').textContent = '상세 내용이 존재하지 않습니다.';
+      }
+
+      // 원본 링크 처리
+      if (link && link !== 'undefined' && link.trim() !== '') {
+        const decodedLink = decodeURIComponent(link);
+        const linkEl = document.getElementById('source-link');
+        linkEl.href = decodedLink;
+        document.getElementById('source-link-container').style.display = 'flex';
+      }
+    });
+
+    // 창 닫기 함수
+    function closeArticleWindow() {
+      // 일반적인 window.close() 호출
+      window.close();
+      
+      // 일부 브라우저에서 window.close()가 차단되는 경우의 안내
+      setTimeout(() => {
+        alert("브라우저 보안 설정으로 인해 창을 직접 닫을 수 없습니다. 현재 탭을 수동으로 닫아주세요.");
+      }, 300);
+    }
+  </script>
+</body>
+</html>
