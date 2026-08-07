@@ -75,7 +75,7 @@ function exportReportPlugin() {
 
 export default defineConfig({
   plugins: [react(), exportReportPlugin()],
-  base: './',
+  base: '/',
   server: {
     host: true,
     port: 5173,
