@@ -1,12 +1,7 @@
 [build]
   base = "VibeCoding/STOCK"
+  publish = "dist"
   command = "npm run build"
-  publish = "VibeCoding/STOCK/dist"
-
-[[redirects]]
-  from = "/api/naver/*"
-  to = "https://polling.finance.naver.com/api/realtime/:splat"
-  status = 200
 
 [[redirects]]
   from = "/*"
