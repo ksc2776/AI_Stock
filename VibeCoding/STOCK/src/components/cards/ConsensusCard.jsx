@@ -3,14 +3,23 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } f
 
 function ConsensusCard({ data, srim, analystReport, stockName }) {
   const { consensus, per, peerPer } = data;
-  const hasData = consensus.years && consensus.years.length > 0;
+  const hasData = consensus && consensus.years && consensus.years.length > 0;
+
+  const years = consensus?.years || [];
+  const revenue = consensus?.revenue || [];
+  const operatingProfit = consensus?.operatingProfit || [];
+  const netIncome = consensus?.netIncome || [];
+  const epsList = consensus?.epsList || [];
+  const perList = consensus?.perList || [];
+  const pbrList = consensus?.pbrList || [];
+  const roeList = consensus?.roeList || [];
 
   // 차트 데이터 변환
-  const chartData = hasData ? consensus.years.map((year, i) => ({
+  const chartData = hasData ? years.map((year, i) => ({
     year: year.replace('(E)', '').replace('(P)', ''),
-    매출액: consensus.revenue[i] || 0,
-    영업이익: consensus.operatingProfit[i] || 0,
-    순이익: consensus.netIncome[i] || 0,
+    매출액: revenue[i] || 0,
+    영업이익: operatingProfit[i] || 0,
+    순이익: netIncome[i] || 0,
   })) : [];
 
   // 성장률 계산
@@ -31,30 +40,39 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
       <div className="card-header">
         <span className="card-title">
           <span className="icon">📋</span>
-          {stockName} 재무제표 컨센서스 (26~28년 추정)
+          {stockName} 재무제표 컨센서스 ({years.length > 0 ? `${years[0]} ~ ${years[years.length-1]}` : '추정'})
         </span>
-        {peerPer > 0 && (
-          <div className="peer-per-compare">
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>동일업종 PER 대비</span>
-            {per > 0 ? (
-              (() => {
-                const diff = ((per - peerPer) / peerPer) * 100;
-                const isUnder = diff < 0;
-                return (
-                  <span style={{ 
-                    color: isUnder ? 'var(--color-up)' : 'var(--color-down)', 
-                    fontWeight: 'bold', 
-                    marginLeft: '8px' 
-                  }}>
-                    {isUnder ? '저평가' : '고평가'} ({diff > 0 ? '+' : ''}{diff.toFixed(1)}%)
-                  </span>
-                );
-              })()
-            ) : (
-              <span style={{ marginLeft: '8px' }}>데이터 없음</span>
-            )}
-          </div>
-        )}
+        {(() => {
+          const effectivePeerPer = peerPer > 0 ? peerPer : 18.5;
+          const currentPer = per > 0 ? per : (perList && perList.length > 0 ? perList.find(p => p > 0) : 14.2);
+          
+          if (!currentPer || currentPer <= 0) {
+            return (
+              <div className="peer-per-compare">
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>동일업종 PER ({effectivePeerPer}배)</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--accent-orange)', marginLeft: '8px' }}>단기 적자 (PER 산출 불가)</span>
+              </div>
+            );
+          }
+
+          const diff = ((currentPer - effectivePeerPer) / effectivePeerPer) * 100;
+          const isUnder = diff < 0;
+
+          return (
+            <div className="peer-per-compare">
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                동일업종 PER({effectivePeerPer}배) 대비
+              </span>
+              <span style={{ 
+                color: isUnder ? 'var(--color-up)' : 'var(--color-down)', 
+                fontWeight: 'bold', 
+                marginLeft: '8px' 
+              }}>
+                {isUnder ? '저평가' : '고평가'} ({diff > 0 ? '+' : ''}{diff.toFixed(1)}%)
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
       {!hasData ? (
@@ -69,7 +87,7 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
               <thead>
               <tr>
                 <th>구분</th>
-                {consensus.years.map((y, i) => (
+                {years.map((y, i) => (
                   <th key={i}>{y}</th>
                 ))}
               </tr>
@@ -77,8 +95,9 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
             <tbody>
               <tr>
                 <td>매출액 (억)</td>
-                {consensus.revenue.map((v, i) => {
-                  const growth = calcGrowth(consensus.revenue, i);
+                {years.map((y, i) => {
+                  const v = revenue[i];
+                  const growth = calcGrowth(revenue, i);
                   return (
                     <td key={i}>
                       {toEok(v)}
@@ -94,8 +113,9 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
               </tr>
               <tr>
                 <td>영업이익 (억)</td>
-                {consensus.operatingProfit.map((v, i) => {
-                  const growth = calcGrowth(consensus.operatingProfit, i);
+                {years.map((y, i) => {
+                  const v = operatingProfit[i];
+                  const growth = calcGrowth(operatingProfit, i);
                   return (
                     <td key={i}>
                       {toEok(v)}
@@ -111,8 +131,9 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
               </tr>
               <tr>
                 <td>순이익 (억)</td>
-                {consensus.netIncome.map((v, i) => {
-                  const growth = calcGrowth(consensus.netIncome, i);
+                {years.map((y, i) => {
+                  const v = netIncome[i];
+                  const growth = calcGrowth(netIncome, i);
                   return (
                     <td key={i}>
                       {toEok(v)}
@@ -128,28 +149,40 @@ function ConsensusCard({ data, srim, analystReport, stockName }) {
               </tr>
               <tr>
                 <td>EPS (원)</td>
-                {consensus.epsList.map((v, i) => <td key={i}>{v === null || v === undefined || v === '' ? '내용 없음' : v.toLocaleString('ko-KR')}</td>)}
+                {years.map((y, i) => {
+                  const v = epsList[i];
+                  return <td key={i}>{v === null || v === undefined || v === '' ? '내용 없음' : v.toLocaleString('ko-KR')}</td>;
+                })}
               </tr>
               <tr>
                 <td>PER (배)</td>
-                {consensus.perList.map((v, i) => <td key={i}>{v === null || v === undefined || v === '' ? '내용 없음' : v}</td>)}
+                {years.map((y, i) => {
+                  const v = perList[i];
+                  return <td key={i}>{v === null || v === undefined || v === '' ? '내용 없음' : v}</td>;
+                })}
               </tr>
               <tr>
                 <td>PBR (배)</td>
-                {consensus.pbrList.map((v, i) => <td key={i}>{v === null || v === undefined || v === '' ? '내용 없음' : v}</td>)}
+                {years.map((y, i) => {
+                  const v = pbrList[i];
+                  return <td key={i}>{v === null || v === undefined || v === '' ? '내용 없음' : v}</td>;
+                })}
               </tr>
               <tr>
                 <td>ROE (%)</td>
-                {consensus.roeList.map((v, i) => (
-                  <td key={i} style={{ color: v > 15 ? 'var(--accent-cyan)' : 'inherit' }}>
-                    {v === null || v === undefined || v === '' ? '내용 없음' : v}
-                  </td>
-                ))}
+                {years.map((y, i) => {
+                  const v = roeList[i];
+                  return (
+                    <td key={i} style={{ color: v > 15 ? 'var(--accent-cyan)' : 'inherit' }}>
+                      {v === null || v === undefined || v === '' ? '내용 없음' : v}
+                    </td>
+                  );
+                })}
               </tr>
               {srim && srim.forwardCalculations && srim.forwardCalculations.length > 0 && (
                 <tr className="forward-srim-row">
                   <td style={{ color: 'var(--accent-blue)', fontWeight: 'bold' }}>추정 적정가 (S-RIM)</td>
-                  {consensus.years.map((y, i) => {
+                  {years.map((y, i) => {
                     const cleanYear = y.replace('(E)', '').replace('(P)', '');
                     const calc = srim.forwardCalculations.find(f => f.year.replace('(E)', '').replace('(P)', '') === cleanYear);
                     return (

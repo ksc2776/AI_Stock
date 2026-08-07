@@ -1,11 +1,11 @@
 ﻿# Dependencies
 node_modules/
-package-lock.json
 
 # Build output
 dist/
 release/
 *.nsis
+analysis-report.csv
 
 # Environment
 .env

@@ -1,11 +1,12 @@
 {
-  "name": "Antigravity",
-  "short_name": "Antigravity",
-  "description": "Stock Analysis Agent",
+  "name": "EQV 퀀트 에이전트",
+  "short_name": "EQV 퀀트",
+  "description": "실시간 수급·가치·매매 분석 시스템",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d1117",
-  "theme_color": "#0d1117",
+  "orientation": "portrait",
+  "background_color": "#0a0f1e",
+  "theme_color": "#0a0f1e",
   "icons": [
     {
       "src": "/icon-192.png",

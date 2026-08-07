@@ -7,6 +7,29 @@ const { calculateSRIM, generateActionPlan } = require('./calculator/srim');
 
 let mainWindow;
 
+const ALLOWED_EXTERNAL_HOSTS = [
+  'finance.yahoo.com',
+  'translate.google.com',
+  'www.google.com',
+  'finance.naver.com',
+  'n.news.naver.com',
+  'www.mk.co.kr',
+  'www.hankyung.com',
+  'biz.chosun.com',
+];
+
+function isAllowedExternalUrl(value) {
+  try {
+    const url = new URL(value);
+    const isWebUrl = url.protocol === 'https:' || url.protocol === 'http:';
+    return isWebUrl && ALLOWED_EXTERNAL_HOSTS.some((host) => (
+      url.hostname === host || url.hostname.endsWith(`.${host}`)
+    ));
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -121,6 +144,9 @@ ipcMain.handle('fetch-theme-data', async (event, themeId) => {
 // IPC 핸들러: 외부 링크 열기
 ipcMain.handle('open-external-link', async (event, url) => {
   try {
+    if (!isAllowedExternalUrl(url)) {
+      throw new Error('External link is not allowed.');
+    }
     await shell.openExternal(url);
     return { success: true };
   } catch (error) {

@@ -10,6 +10,7 @@ import ThemeMarketCard from './cards/ThemeMarketCard';
 
 function Dashboard({ data }) {
   const [exporting, setExporting] = useState(false);
+  const isMockData = Boolean(data?.isMock);
 
   const handleExport = async () => {
     try {
@@ -39,9 +40,9 @@ function Dashboard({ data }) {
       
       const result = await res.json();
       if (result.success) {
-        alert('엑셀 익스포트 완료!\n파일 위치: ' + result.path);
+        alert('리포트 내보내기 완료!\n파일 위치: ' + result.path);
       } else {
-        alert('엑셀 익스포트 실패: ' + result.error);
+        alert('리포트 내보내기 실패: ' + result.error);
       }
     } catch (e) {
       console.error(e);
@@ -108,6 +109,12 @@ function Dashboard({ data }) {
 
   return (
     <div>
+      {isMockData && (
+        <div className="mock-data-warning" role="status">
+          개발용 샘플 데이터입니다. 실제 API 응답이 아니므로 투자 판단에 사용하지 마세요.
+        </div>
+      )}
+
       {/* 리포트 헤더 */}
       <div className="report-header animate-slide-up" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>

@@ -282,11 +282,21 @@ body::before {
   font-family: var(--font-mono);
 }
 
-/* ===== ?�?�보??그리??===== */
+/* ===== 대시보드 그리드 ===== */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-lg);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-grid > * {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-grid .card-wide {
@@ -295,6 +305,33 @@ body::before {
 
 .dashboard-grid .card-full {
   grid-column: span 3;
+}
+
+@media (max-width: 1280px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .card-role-issueNotice {
+    grid-column: span 2 !important;
+  }
+  .card-role-themeMarket {
+    grid-column: span 2 !important;
+  }
+  .dashboard-grid .card-wide {
+    grid-column: span 2 !important;
+  }
+  .dashboard-grid .card-full {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 820px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .dashboard-grid > * {
+    grid-column: span 1 !important;
+  }
 }
 
 /* ===== 카드 공통 ===== */
@@ -1321,23 +1358,6 @@ body::before {
     .theme-content { flex-direction: column !important; }
     .ts-ticker, .ts-price, .ts-change { width: auto !important; }
     /* Reduce large chunk padding/margins that can cause overflow */
-    .app-header, .app-subtitle { padding-left: 0 !important; padding-right: 0 !important; }
-  }
-}
-
-/* ===== GICS Theme Card Custom Styles ===== */
-.theme-stocks-scroll {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding: 4px 2px 12px;
-  margin-top: 12px;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-.theme-stocks-scroll::-webkit-scrollbar {
-  height: 6px;
 }
 .theme-stocks-scroll::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.02);
