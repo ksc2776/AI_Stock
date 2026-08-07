@@ -1,0 +1,2 @@
+/api/naver/* https://polling.finance.naver.com/api/realtime/:splat 200
+/* /index.html 200

@@ -1,16 +1,13 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "installCommand": "npm install",
-  "framework": "vite",
+  "buildCommand": "cd VibeCoding/STOCK && npm install && npm run build",
+  "outputDirectory": "VibeCoding/STOCK/dist",
+  "installCommand": "cd VibeCoding/STOCK && npm install",
+  "framework": null,
   "routes": [
     {
       "src": "/api/naver/(.*)",
       "dest": "https://polling.finance.naver.com/api/realtime/$1"
-    },
-    {
-      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
