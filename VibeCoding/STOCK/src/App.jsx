@@ -6,6 +6,42 @@ import koreaStocks from './data/koreaStocks.json';
 // Vercel 프로덕션 환경에서도 Mock 데이터 병합 허용 (실시간 가격 + 재무 Mock)
 const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
 
+// ── 분석 시점 날짜 유틸리티 ─────────────────────────────────────────────────
+// 분석 시점(Date 객체)을 받아 'YYYY.MM.DD' 형식 문자열 반환
+function formatDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}.${m}.${d}`;
+}
+
+// 분석 시점에서 N 영업일 전 날짜 반환 (주말 건너뜀)
+function subtractBusinessDays(date, days) {
+  const result = new Date(date);
+  let count = 0;
+  while (count < days) {
+    result.setDate(result.getDate() - 1);
+    const dow = result.getDay();
+    if (dow !== 0 && dow !== 6) count++; // 일/토 제외
+  }
+  return result;
+}
+
+// 분석 시점 기준 최근 N 영업일 배열 반환 ['YYYY.MM.DD', ...]
+function getRecentBusinessDays(baseDate, count) {
+  const days = [];
+  let current = new Date(baseDate);
+  // 오늘이 주말이면 직전 금요일부터 시작
+  while (current.getDay() === 0 || current.getDay() === 6) {
+    current.setDate(current.getDate() - 1);
+  }
+  while (days.length < count) {
+    days.push(formatDate(current));
+    current = subtractBusinessDays(current, 1);
+  }
+  return days;
+}
+
 function App() {
   const [analysisData, setAnalysisData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,6 +51,8 @@ function App() {
     setLoading(true);
     setError(null);
     setAnalysisData(null);
+    // ▶ 분석 시작 시각 캡처 — 이후 모든 날짜/시간 데이터의 기준점
+    const analysisTime = new Date();
 
     try {
       // ── Electron 환경: IPC 호출 ──────────────────────────────────────
@@ -30,7 +68,7 @@ function App() {
 
       // ── 웹(Vercel) 환경: 서버 API + Mock 재무 데이터 병합 ────────────
       // 1) Mock 재무/투자자 데이터를 먼저 생성 (항상 사용 가능)
-      const mockBase = await getMockData(stockCode);
+      const mockBase = await getMockData(stockCode, analysisTime);
 
       // 2) 서버에서 실시간 가격 및 재무 데이터 가져오기 시도
       let serverData = null;
@@ -99,6 +137,12 @@ function App() {
         mergedData.actionPlan.targetPrice = Math.round(cp * 1.2);
       }
 
+      // ▶ 분석 완료 시각으로 analyzedAt 갱신
+      mergedData.analyzedAt = new Date().toLocaleString('ko-KR', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      });
       setAnalysisData(mergedData);
       setError(null);
     } catch (err) {
@@ -160,7 +204,7 @@ function App() {
 }
 
 // 브라우저 개발 환경용 Mock 데이터
-async function getMockData(code) {
+async function getMockData(code, analysisTime = new Date()) {
   // 입력된 코드에 맞는 종목 이름을 찾아 동적으로 반영
   const stockInfo = koreaStocks.find(s => s.code === code) || { name: '알 수 없는 종목' };
   const stockName = stockInfo.name;
@@ -234,14 +278,17 @@ async function getMockData(code) {
     const baseVol = vol || 1500000;
     const trendMult = changePercent >= 0 ? 1 : -1;
     
+    // ▶ 분석 시점 기준 최근 5 영업일
+    const bdays = getRecentBusinessDays(analysisTime, 5);
+    const priceSteps = [1.0, 0.98, 0.95, 0.96, 0.99];
     return {
-      daily: [
-        { date: '2026.06.05', foreignNet: Math.round(baseVol * 0.12 * trendMult), institutionNet: Math.round(baseVol * 0.08 * trendMult), close: price, volume: baseVol },
-        { date: '2026.06.04', foreignNet: Math.round(baseVol * 0.05 * -trendMult), institutionNet: Math.round(baseVol * 0.06 * trendMult), close: Math.round(price * 0.98), volume: Math.round(baseVol * 0.8) },
-        { date: '2026.06.03', foreignNet: Math.round(baseVol * 0.15 * trendMult), institutionNet: Math.round(baseVol * -0.04), close: Math.round(price * 0.95), volume: Math.round(baseVol * 1.1) },
-        { date: '2026.06.02', foreignNet: Math.round(baseVol * 0.08), institutionNet: Math.round(baseVol * 0.1), close: Math.round(price * 0.96), volume: Math.round(baseVol * 1.2) },
-        { date: '2026.06.01', foreignNet: Math.round(baseVol * 0.1 * trendMult), institutionNet: Math.round(baseVol * 0.05), close: Math.round(price * 0.99), volume: Math.round(baseVol * 0.9) },
-      ],
+      daily: bdays.map((date, i) => ({
+        date,
+        foreignNet: Math.round(baseVol * (i === 0 ? 0.12 : i === 1 ? -0.05 : i === 2 ? 0.15 : i === 3 ? 0.08 : 0.1) * trendMult),
+        institutionNet: Math.round(baseVol * (i === 0 ? 0.08 : i === 1 ? 0.06 : i === 2 ? -0.04 : i === 3 ? 0.1 : 0.05) * trendMult),
+        close: Math.round(price * priceSteps[i]),
+        volume: Math.round(baseVol * (i === 0 ? 1.0 : i === 1 ? 0.8 : i === 2 ? 1.1 : i === 3 ? 1.2 : 0.9)),
+      })),
       summary: {
         foreignTotal: Math.round(baseVol * 0.42 * trendMult),
         institutionTotal: Math.round(baseVol * 0.25 * trendMult),
@@ -252,13 +299,15 @@ async function getMockData(code) {
     };
   };
 
+  // ▶ SDI 투자자 날짜도 분석 시점 기준으로 동적 생성
+  const sdiBdays = getRecentBusinessDays(analysisTime, 5);
   const sdiInvestors = {
     daily: [
-      { date: '2026.06.05', foreignNet: -41664, institutionNet: 542951, close: 568000, volume: 384502 },
-      { date: '2026.06.04', foreignNet: 13783, institutionNet: 466801, close: 607000, volume: 410938 },
-      { date: '2026.06.02', foreignNet: -107865, institutionNet: 1018750, close: 602000, volume: 554201 },
-      { date: '2026.06.01', foreignNet: 14608, institutionNet: 854997, close: 652000, volume: 681320 },
-      { date: '2026.05.29', foreignNet: 138902, institutionNet: 2040080, close: 688000, volume: 512040 },
+      { date: sdiBdays[0], foreignNet: -41664,  institutionNet: 542951,  close: 568000, volume: 384502 },
+      { date: sdiBdays[1], foreignNet: 13783,   institutionNet: 466801,  close: 607000, volume: 410938 },
+      { date: sdiBdays[2], foreignNet: -107865, institutionNet: 1018750, close: 602000, volume: 554201 },
+      { date: sdiBdays[3], foreignNet: 14608,   institutionNet: 854997,  close: 652000, volume: 681320 },
+      { date: sdiBdays[4], foreignNet: 138902,  institutionNet: 2040080, close: 688000, volume: 512040 },
     ],
     summary: {
       foreignTotal: 17764,
@@ -271,18 +320,22 @@ async function getMockData(code) {
 
   const targetInvestors = code === '006400' ? sdiInvestors : generateDynamicInvestors(realPrice, realVolume);
 
+  // ▶ 애널리스트 리포트 날짜: 분석 시점 기준 3영업일 전
+  const reportDate = formatDate(subtractBusinessDays(analysisTime, 3));
+  const sdiReportDate = formatDate(subtractBusinessDays(analysisTime, 10));
+
   const defaultAnalystReport = {
     title: `${stockName}, 하반기 실적 턴어라운드 및 신성장 동력 확보 기대`,
     broker: '글로벌증권',
     targetPrice: Math.round(realPrice * 1.25 / 1000) * 1000,
-    date: '2026.06.05'
+    date: reportDate,
   };
 
   const sdiAnalystReport = {
     title: 'AIDC향 ESS의 중장기적인 성장성 확보',
     broker: 'iM증권',
     targetPrice: 650000,
-    date: '2026.05.11'
+    date: sdiReportDate,
   };
 
   const targetAnalystReport = code === '006400' ? sdiAnalystReport : defaultAnalystReport;
@@ -367,31 +420,37 @@ async function getMockData(code) {
       trendComment: trendComment,
       sentimentComment: sentimentComment,
     },
+    // ▶ 뉴스 날짜: 분석 시점 기준 최근 3 영업일
     news: [
       { 
         title: `${stockName}, 하반기 실적 개선 기대감에 강세`, 
         source: '한국경제', 
-        date: '2026.06.05', 
+        date: getRecentBusinessDays(analysisTime, 3)[0],
         link: 'https://finance.naver.com/item/main.naver?code=' + code,
         detail: `[서울=한국경제] ${stockName}은 고부가가치 부품 라인업 다변화 및 하반기 전방 IT 디바이스 세트 수요 회복 조짐에 힘입어 실적 개선 흐름이 가속화될 전망입니다. 특히 온디바이스 AI 시장 확대에 따른 고사양 기판 공급 단가 인상 성공 및 패키징 수주 잔고 증가가 주가 강세를 단단하게 서포트하고 있습니다. 외인 매수세 유입과 함께 하방 견조성 확보 국면입니다.`
       },
       { 
         title: `외국인 순매수 지속... ${stockName} 주가 긍정적`, 
         source: '매일경제', 
-        date: '2026.06.04', 
+        date: getRecentBusinessDays(analysisTime, 3)[1],
         link: 'https://finance.naver.com/item/main.naver?code=' + code,
         detail: `[서울=매일경제] 외국인 투자자들이 ${stockName} 주식을 최근 5거래일 연속 순매수하며 수급 유입 강도를 높이고 있습니다. 글로벌 반도체 공급망 정상화 흐름 속에서 동사의 고성능 적층 부품 및 전장용 인프라 공급 성과가 재조명받고 있는 것으로 평가됩니다. 기관 역시 매수 우위로 전환하며 쌍끌이 수급 기조로 지수 방어력을 확고히 다지는 모양새입니다.`
       },
       { 
         title: `${stockName} 신규 투자 발표, 장기 성장 동력 확보`, 
         source: '조선비즈', 
-        date: '2026.06.03', 
+        date: getRecentBusinessDays(analysisTime, 3)[2],
         link: 'https://finance.naver.com/item/main.naver?code=' + code,
         detail: `[서울=조선비즈] ${stockName}이 차세대 고부가 AI 전용 라인 확보를 위해 약 2,500억 원 규모의 대규모 신규 설비 투자를 단행한다고 전격 공시했습니다. 이번 투자는 글로벌 하이퍼스케일러 데이터센터향 특수 전장 부품 공급 강화를 목적으로 하며, 완공 시 연간 매출액이 약 15% 이상 추가로 증대되는 효과를 거둘 것으로 예측되어 중장기 성장 모멘텀을 확실히 장착한 것으로 관측됩니다.`
       },
     ],
     analystReport: targetAnalystReport,
-    analyzedAt: new Date().toLocaleString('ko-KR'),
+    // ▶ analyzedAt: getMockData 생성 시각 (handleAnalyze에서 최종 완료 시각으로 덮어씌워짐)
+    analyzedAt: analysisTime.toLocaleString('ko-KR', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    }),
   };
 }
 
