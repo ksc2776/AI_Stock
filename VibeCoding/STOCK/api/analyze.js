@@ -75,7 +75,10 @@ module.exports = async (req, res) => {
       const itemRes = await httpsGet(itemUrl);
       if (itemRes.status === 200) {
         const body = itemRes.body;
-        
+
+        const bpsIdx = body.indexOf('BPS');
+        const perIdx = body.indexOf('PER');
+        return res.status(200).json({success:false, debugBps: bpsIdx !== -1 ? body.substring(bpsIdx - 100, bpsIdx + 500) : 'not found BPS', debugPer: perIdx !== -1 ? body.substring(perIdx - 100, perIdx + 500) : 'not found PER'});
         // 1. 종목명 추출
         const titleMatch = body.match(/<title>([^<]+)<\/title>/i);
         if (titleMatch) {
