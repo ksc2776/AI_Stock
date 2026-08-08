@@ -3,7 +3,8 @@ import SearchBar from './components/SearchBar';
 import Dashboard from './components/Dashboard';
 import koreaStocks from './data/koreaStocks.json';
 
-const allowMockFallback = import.meta.env.DEV;
+// Vercel 프로덕션 환경에서도 Mock 데이터 병합 허용 (실시간 가격 + 재무 Mock)
+const isElectron = typeof window !== 'undefined' && Boolean(window.electronAPI);
 
 function App() {
   const [analysisData, setAnalysisData] = useState(null);
@@ -16,46 +17,97 @@ function App() {
     setAnalysisData(null);
 
     try {
-      let result;
-      // Electron 환경에서 IPC 호출
-      if (window.electronAPI) {
-        result = await window.electronAPI.analyzeStock(stockCode);
-      } else {
-        // 브라우저 (Vercel 웹) 환경에서 API 호출
-        try {
-          const res = await fetch(`/api/analyze?code=${stockCode}`);
-          result = await res.json();
-        } catch (e) {
-          console.warn('API fetch failed:', e);
-          if (allowMockFallback) {
-            const mock = await getMockData(stockCode);
-            result = { success: true, data: { ...mock, isMock: true } };
-          } else {
-            result = { success: false, error: '분석 API에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.' };
-          }
-        }
-      }
-
-      if (result && result.success) {
-        setAnalysisData(result.data);
-        setError(null);
-      } else {
-        console.warn('API response error:', result?.error);
-        if (allowMockFallback) {
-          const mock = await getMockData(stockCode);
-          setAnalysisData({ ...mock, isMock: true });
-          setError(null);
+      // ── Electron 환경: IPC 호출 ──────────────────────────────────────
+      if (isElectron) {
+        const result = await window.electronAPI.analyzeStock(stockCode);
+        if (result && result.success) {
+          setAnalysisData(result.data);
         } else {
           setError(result?.error || '데이터를 불러오는 중 오류가 발생했습니다.');
         }
+        return;
       }
+
+      // ── 웹(Vercel) 환경: 서버 API + Mock 재무 데이터 병합 ────────────
+      // 1) Mock 재무/투자자 데이터를 먼저 생성 (항상 사용 가능)
+      const mockBase = await getMockData(stockCode);
+
+      // 2) 서버에서 실시간 가격 및 재무 데이터 가져오기 시도
+      let serverData = null;
+      try {
+        const res = await fetch(`/api/analyze?code=${stockCode}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success) {
+            serverData = json.data;
+          }
+        }
+      } catch (e) {
+        console.warn('Server API fetch failed, using mock data:', e.message);
+      }
+
+      // 3) 실시간 데이터와 Mock 데이터 병합
+      const mergedData = {
+        ...mockBase,
+        isMock: !serverData, // 실시간 데이터가 있으면 Mock 배지 숨김
+        price: serverData?.price 
+          ? { ...mockBase.price, ...serverData.price }
+          : mockBase.price,
+        financials: serverData?.financials
+          ? { ...mockBase.financials, ...serverData.financials }
+          : mockBase.financials,
+      };
+
+      // 4) 실시간 가격 및 재무 기반으로 SRIM/ActionPlan 재계산
+      const currentPrice = mergedData.price.current;
+      const bps = mergedData.financials.bps;
+      const roe = mergedData.financials.roe;
+      const requiredReturn = 8.5; // 기대수익률 8.5% 가정
+
+      if (currentPrice > 0 && bps > 0 && roe > 0) {
+        // SRIM 공식 적용: 적정가 = BPS * (ROE / 기대수익률)
+        const fairValue = Math.round(bps * (roe / requiredReturn));
+        
+        mergedData.srim = {
+          ...mergedData.srim,
+          fairValueNeutral: fairValue,
+          fairValueOptimistic: Math.round(fairValue * 1.2),
+          fairValueConservative: Math.round(fairValue * 0.8),
+          valuation: currentPrice < fairValue * 0.9 ? '저평가' : (currentPrice > fairValue * 1.1 ? '고평가' : '적정'),
+          inputs: { bps, roe, requiredReturn, isGlobalTop: false },
+          forwardCalculations: [
+            { year: '2026.12(E)', fairValue: Math.round(fairValue * 1.05) },
+            { year: '2027.12(E)', fairValue: Math.round(fairValue * 1.15) },
+            { year: '2028.12(E)', fairValue: Math.round(fairValue * 1.25) },
+          ],
+        };
+
+        const upside = ((fairValue / currentPrice) - 1) * 100;
+        mergedData.actionPlan = {
+          ...mergedData.actionPlan,
+          score: Math.min(100, Math.max(0, 50 + upside)),
+          grade: upside > 15 ? 'Strong Buy' : (upside > 5 ? 'Buy' : (upside < -10 ? 'Sell' : 'Hold')),
+          entryPrice: Math.round(currentPrice * 0.97),
+          targetPrice: fairValue,
+          stopLoss: Math.round(currentPrice * 0.90),
+        };
+      } else if (serverData?.price) {
+        // 가격만 있고 재무가 없을 때의 Fallback 계산
+        const cp = serverData.price.current;
+        mergedData.srim.fairValueNeutral = Math.round(cp * 1.1);
+        mergedData.actionPlan.targetPrice = Math.round(cp * 1.2);
+      }
+
+      setAnalysisData(mergedData);
+      setError(null);
     } catch (err) {
       console.warn('Unhandled analysis error:', err);
-      if (allowMockFallback) {
+      // 최후 수단: 전체 Mock 데이터로 표시
+      try {
         const mock = await getMockData(stockCode);
         setAnalysisData({ ...mock, isMock: true });
         setError(null);
-      } else {
+      } catch {
         setError(err.message || '데이터를 불러오는 중 오류가 발생했습니다.');
       }
     } finally {

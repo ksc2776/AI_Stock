@@ -1,11 +1,23 @@
-{
-    "version": 2,
-    "buildCommand": "cd VibeCoding/STOCK && npm install && npm run build",
-    "outputDirectory": "VibeCoding/STOCK/dist",
-    "routes": [
-          {
-                  "src": "/(.*)",
-                  "dest": "/index.html"
-          }
-    ]
+﻿{
+  "version": 2,
+  "framework": "vite",
+  "buildCommand": "cd VibeCoding/STOCK && npm install && npm run build",
+  "outputDirectory": "VibeCoding/STOCK/dist",
+  "installCommand": "echo skip",
+  "routes": [
+    {
+      "src": "/api/naver/(.*)",
+      "dest": "https://polling.finance.naver.com/api/realtime/$1",
+      "headers": {
+        "Access-Control-Allow-Origin": "*"
+      }
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
 }
