@@ -53,10 +53,11 @@ function App() {
         price: serverData?.price 
           ? { ...mockBase.price, ...serverData.price }
           : mockBase.price,
-        financials: serverData?.financials
-          ? { ...mockBase.financials, ...serverData.financials }
-          : mockBase.financials,
+        // financials는 항상 mockBase 사용 (서버 API는 consensus 객체를 제공 못함)
+        // consensus 문자열이 consensus 객체를 덮어쓰는 버그 방지
+        financials: mockBase.financials,
       };
+
 
       // 4) 실시간 가격 및 재무 기반으로 SRIM/ActionPlan 재계산
       const currentPrice = mergedData.price.current;
@@ -172,23 +173,24 @@ async function getMockData(code) {
   let realVolume = 18542367;
 
   try {
-    // Vite Proxy를 통해 네이버 금융 실시간 주가 API(Polling) 호출 (CORS 우회 및 정확한 현재가)
-    let res = await fetch(`/api/naver?query=SERVICE_ITEM:${code}`);
-    let json = await res.json();
-    const data = json?.result?.areas?.[0]?.datas?.[0];
-    
-    if (data && data.nv) {
-      realPrice = data.nv;
-      const sign = (data.rf === '4' || data.rf === '5') ? -1 : 1;
-      change = data.cv * sign;
-      changePercent = data.cr * sign;
-      high = data.hv || realPrice;
-      low = data.lv || realPrice;
-      if (data.aq) realVolume = data.aq;
+    // /api/analyze를 통해 실시간 주가 데이터 획득 (Vercel 서버리스 함수)
+    const res = await fetch(`/api/analyze?code=${code}`);
+    if (res.ok) {
+      const json = await res.json();
+      const p = json?.data?.price;
+      if (p && p.current > 0) {
+        realPrice = p.current;
+        change = p.change ?? change;
+        changePercent = p.changePercent ?? changePercent;
+        high = p.high || realPrice;
+        low = p.low || realPrice;
+        if (p.volume) realVolume = p.volume;
+      }
     }
   } catch (e) {
-    console.error('실시간 가격을 가져오는데 실패했습니다 (Mock fallback 사용):', e);
+    // 실패 시 기본값(Mock) 유지 — 콘솔 에러 출력하지 않음
   }
+
 
   const defaultConsensus = {
     years: ['2023.12', '2024.12', '2025.12', '2026.12(E)', '2027.12(E)', '2028.12(E)'],

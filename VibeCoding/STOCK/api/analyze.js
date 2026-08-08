@@ -1,7 +1,6 @@
 /**
  * Vercel Serverless API - /api/analyze
- * 네이버 금융 실시간 데이터를 직접 fetch하여 반환
- * (Electron scraper 대신 순수 fetch 기반으로 동작)
+ * 네이버 금융 실시간 주가 데이터만 반환 (재무/컨센서스는 클라이언트 Mock 사용)
  */
 
 const https = require('https');
@@ -42,7 +41,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // 네이버 금융 실시간 시세 (Polling API)
+    // ── 네이버 금융 실시간 시세 (Polling API) ──────────────────────────────────
     let priceData = null;
     try {
       const naverUrl = `https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:${code}`;
@@ -66,67 +65,31 @@ module.exports = async (req, res) => {
       console.warn('Naver polling fetch failed:', e.message);
     }
 
-    // 네이버 금융 종목 상세 정보 및 재무 지표 파싱
+    // ── 종목명: 네이버 금융 페이지 title 파싱 ──────────────────────────────────
     let stockName = code;
-    let financials = { bps: 0, roe: 0, dividend: 0, pbr: 0, per: 0 };
-    
     try {
       const itemUrl = `https://finance.naver.com/item/main.naver?code=${code}`;
       const itemRes = await httpsGet(itemUrl);
       if (itemRes.status === 200) {
-        const body = itemRes.body;
-
-        const bpsIdx = body.indexOf('BPS');
-        const perIdx = body.indexOf('PER');
-                const titleMatch = body.match(/<title>([^<]+)<\/title>/i);
-                if (titleMatch) {
-                            const rawTitle = titleMatch[1];
+        const titleMatch = itemRes.body.match(/<title>([^<]+)<\/title>/i);
+        if (titleMatch) {
+          const rawTitle = titleMatch[1];
           const nameMatch = rawTitle.split(':')[0].trim();
-          if (nameMatch) stockName = nameMatch;
+          if (nameMatch && nameMatch.length > 0) {
+            stockName = nameMatch;
+          }
         }
-
-        // 2. 주요 재무 지표 파싱 (Regex 기반)
-        // BPS (주당순자산)
-        const bpsMatch = body.match(/BPS<\/em>\s*<dd>\s*<em[^>]*>([\d,]+)<\/em>/);
-        if (bpsMatch) financials.bps = parseInt(bpsMatch[1].replace(/,/g, ''), 10);
-
-        // PBR
-        const pbrMatch = body.match(/PBR<\/em>\s*<dd>\s*<em[^>]*>([\d,.]+)<\/em>/);
-        if (pbrMatch) financials.pbr = parseFloat(pbrMatch[1]);
-
-        // PER
-        const perMatch = body.match(/PER<\/em>\s*<dd>\s*<em[^>]*>([\d,.-]+)<\/em>/);
-        if (perMatch) financials.per = parseFloat(perMatch[1]) || 0;
-
-        // ROE (추정치 또는 전년도 데이터 - 테이블에서 추출 시도)
-        // 정교한 파싱 대신 간단히 HTML 내 텍스트 검색 (실제 서비스에서는 cheerio 등 사용 권장)
-        const roePattern = /ROE\(%\)<\/th>\s*<td[^>]*>([\d,.-]+)<\/td>/g;
-        let roeMatches = [...body.matchAll(roePattern)];
-        if (roeMatches.length > 0) {
-          // 마지막(최근) ROE 값 사용
-          const lastRoe = roeMatches[roeMatches.length - 1][1];
-          financials.roe = parseFloat(lastRoe) || 0;
-        }
-
-        // 배당금 (추정)
-        const divMatch = body.match(/현금배당수익률<\/em>\s*<dd>\s*<em[^>]*>([\d,.]+)%<\/em>/);
-        if (divMatch) financials.dividend = parseFloat(divMatch[1]);
       }
     } catch (e) {
-      console.warn('Naver item fetch/parse failed:', e.message);
+      console.warn('Naver item fetch failed:', e.message);
     }
 
-    // 가격 데이터 fallback
     const price = priceData || {
-      current: 0,
-      change: 0,
-      changePercent: 0,
-      high: 0,
-      low: 0,
-      volume: 0,
+      current: 0, change: 0, changePercent: 0,
+      high: 0, low: 0, volume: 0,
     };
 
-    // 응답 데이터 구성
+    // ── 응답: price 정보만 반환 (financials/consensus는 클라이언트 Mock 사용) ──
     return res.status(200).json({
       success: true,
       data: {
@@ -144,14 +107,7 @@ module.exports = async (req, res) => {
           prevVolume: Math.round(price.volume * 0.85),
           volumeRatio: price.volume > 0 ? 1.18 : 0,
         },
-        financials: {
-          bps: financials.bps,
-          roe: financials.roe,
-          dividend: financials.dividend,
-          pbr: financials.pbr,
-          per: financials.per,
-          consensus: financials.roe > 10 ? '매수' : '중립'
-        }
+        // financials는 의도적으로 제외 — 클라이언트 Mock 데이터 사용
       }
     });
   } catch (error) {
