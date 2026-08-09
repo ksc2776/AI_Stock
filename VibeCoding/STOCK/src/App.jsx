@@ -91,6 +91,7 @@ function App() {
         price: serverData?.price 
           ? { ...mockBase.price, ...serverData.price }
           : mockBase.price,
+        investors: serverData?.investors ? serverData.investors : mockBase.investors,
         // financials는 항상 mockBase 사용 (서버 API는 consensus 객체를 제공 못함)
         // consensus 문자열이 consensus 객체를 덮어쓰는 버그 방지
         financials: mockBase.financials,

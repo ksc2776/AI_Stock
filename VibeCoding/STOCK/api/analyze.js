@@ -4,6 +4,7 @@
  */
 
 const https = require('https');
+const { fetchInvestorTrend } = require('../electron/scraper/naverFinance');
 
 function httpsGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -89,6 +90,14 @@ module.exports = async (req, res) => {
       high: 0, low: 0, volume: 0,
     };
 
+    // ── 투자자 동향 수집 (naverFinance 모듈 재사용) ──────────────────────────
+    let investors = null;
+    try {
+      investors = await fetchInvestorTrend(code);
+    } catch (e) {
+      console.warn('Naver investor fetch failed:', e.message);
+    }
+
     // ── 응답: price 정보만 반환 (financials/consensus는 클라이언트 Mock 사용) ──
     return res.status(200).json({
       success: true,
@@ -107,6 +116,7 @@ module.exports = async (req, res) => {
           prevVolume: Math.round(price.volume * 0.85),
           volumeRatio: price.volume > 0 ? 1.18 : 0,
         },
+        investors,
         // financials는 의도적으로 제외 — 클라이언트 Mock 데이터 사용
       }
     });

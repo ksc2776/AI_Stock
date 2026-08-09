@@ -73,8 +73,35 @@ function exportReportPlugin() {
   };
 }
 
+function apiAnalyzePlugin() {
+  return {
+    name: 'api-analyze',
+    configureServer(server) {
+      server.middlewares.use('/api/analyze', async (req, res, next) => {
+        try {
+          const analyzeFn = require('./api/analyze.js');
+          const url = new URL(req.url, `http://${req.headers.host}`);
+          req.query = Object.fromEntries(url.searchParams);
+          
+          res.status = (code) => { res.statusCode = code; return res; };
+          res.json = (obj) => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(obj));
+          };
+          
+          await analyzeFn(req, res);
+        } catch (e) {
+          console.error(e);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ success: false, error: e.message }));
+        }
+      });
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), exportReportPlugin()],
+  plugins: [react(), exportReportPlugin(), apiAnalyzePlugin()],
   base: '/',
   server: {
     host: true,
