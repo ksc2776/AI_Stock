@@ -123,7 +123,7 @@ async function fetchInvestorTrend(code) {
       }
     });
 
-    const recentTrends = trends.slice(0, 5);
+    const recentTrends = trends.slice(0, 10);
     
     // 최근 동향 요약
     const foreignTotal = recentTrends.reduce((sum, t) => sum + t.foreignNet, 0);

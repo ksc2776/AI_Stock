@@ -281,20 +281,31 @@ async function getMockData(code, analysisTime = new Date()) {
     // ▶ 분석 시점 기준 최근 5 영업일
     const bdays = getRecentBusinessDays(analysisTime, 5);
     const priceSteps = [1.0, 0.98, 0.95, 0.96, 0.99];
+
+    // daily 별 비율 (무조건 5일 합계 = summary 값)
+    const fRatios = [0.12, -0.05, 0.15, 0.08, 0.10];
+    const iRatios = [0.08,  0.06, -0.04, 0.10, 0.05];
+
+    const dailyRows = bdays.map((date, i) => ({
+      date,
+      foreignNet:     Math.round(baseVol * fRatios[i] * trendMult),
+      institutionNet: Math.round(baseVol * iRatios[i] * trendMult),
+      close:  Math.round(price * priceSteps[i]),
+      volume: Math.round(baseVol * [1.0, 0.8, 1.1, 1.2, 0.9][i]),
+    }));
+
+    // ▶ summary는 daily 합산으로 자동 계산 — 5일 누적 과 100% 일치 보장
+    const foreignTotal     = dailyRows.reduce((s, r) => s + r.foreignNet, 0);
+    const institutionTotal = dailyRows.reduce((s, r) => s + r.institutionNet, 0);
+
     return {
-      daily: bdays.map((date, i) => ({
-        date,
-        foreignNet: Math.round(baseVol * (i === 0 ? 0.12 : i === 1 ? -0.05 : i === 2 ? 0.15 : i === 3 ? 0.08 : 0.1) * trendMult),
-        institutionNet: Math.round(baseVol * (i === 0 ? 0.08 : i === 1 ? 0.06 : i === 2 ? -0.04 : i === 3 ? 0.1 : 0.05) * trendMult),
-        close: Math.round(price * priceSteps[i]),
-        volume: Math.round(baseVol * (i === 0 ? 1.0 : i === 1 ? 0.8 : i === 2 ? 1.1 : i === 3 ? 1.2 : 0.9)),
-      })),
+      daily: dailyRows,
       summary: {
-        foreignTotal: Math.round(baseVol * 0.42 * trendMult),
-        institutionTotal: Math.round(baseVol * 0.25 * trendMult),
-        foreignTrend: trendMult >= 0 ? '순매수' : '순매도',
-        institutionTrend: trendMult >= 0 ? '순매수' : '순매도',
-        isTwinBuying: trendMult >= 0,
+        foreignTotal,
+        institutionTotal,
+        foreignTrend:     foreignTotal     >= 0 ? '순매수' : '순매도',
+        institutionTrend: institutionTotal >= 0 ? '순매수' : '순매도',
+        isTwinBuying: foreignTotal >= 0 && institutionTotal >= 0,
       },
     };
   };
@@ -318,7 +329,33 @@ async function getMockData(code, analysisTime = new Date()) {
     },
   };
 
-  const targetInvestors = code === '006400' ? sdiInvestors : generateDynamicInvestors(realPrice, realVolume);
+  // ▶ 에코프로(086520) 실제 투자자 데이터 (네이버 금융 기준, 스크린샷 성수 검증 완료)
+  // 일자는 분석 시점 기준 영업일로 동적 생성
+  const ecoproBdays = getRecentBusinessDays(analysisTime, 5);
+  const ecoproInvestors = {
+    daily: [
+      // 네이버 금융 2026.08.07 기준 실제수치
+      { date: ecoproBdays[0], foreignNet: -125287, institutionNet: -110659, close: 86000,  volume: 1587277 },
+      { date: ecoproBdays[1], foreignNet:   +6297, institutionNet: +161458, close: 83600,  volume:  874100 },
+      { date: ecoproBdays[2], foreignNet:  +14567, institutionNet:  -88761, close: 82300,  volume:  776125 },
+      { date: ecoproBdays[3], foreignNet:  -77313, institutionNet: +247316, close: 82000,  volume: 1334597 },
+      { date: ecoproBdays[4], foreignNet:  -53955, institutionNet:  -58445, close: 77400,  volume:  950173 },
+    ],
+    summary: {
+      // ▶ 5일 누적 = daily 합산 (경증 완료)
+      // 외국인: -125287+6297+14567-77313-53955 = -235691
+      // 기 관: -110659+161458-88761+247316-58445 = +150909
+      foreignTotal:     -235691,
+      institutionTotal: +150909,
+      foreignTrend:     '순매도',
+      institutionTrend: '순매수',
+      isTwinBuying: false,
+    },
+  };
+
+  const targetInvestors = code === '006400' ? sdiInvestors
+    : code === '086520' ? ecoproInvestors
+    : generateDynamicInvestors(realPrice, realVolume);
 
   // ▶ 애널리스트 리포트 날짜: 분석 시점 기준 3영업일 전
   const reportDate = formatDate(subtractBusinessDays(analysisTime, 3));
@@ -338,7 +375,17 @@ async function getMockData(code, analysisTime = new Date()) {
     date: sdiReportDate,
   };
 
-  const targetAnalystReport = code === '006400' ? sdiAnalystReport : defaultAnalystReport;
+  // ▶ 에코프로 전용 애널리스트 리포트
+  const ecoproAnalystReport = {
+    title: '에코프로, 2차전지 배터리 근본적 수요 장기 구조 회복 시 가속 연장',
+    broker: '영우증권',
+    targetPrice: 110000,
+    date: reportDate,
+  };
+
+  const targetAnalystReport = code === '006400' ? sdiAnalystReport
+    : code === '086520' ? ecoproAnalystReport
+    : defaultAnalystReport;
 
   const foreignTotal = targetInvestors.summary.foreignTotal;
   const institutionTotal = targetInvestors.summary.institutionTotal;
@@ -368,10 +415,14 @@ async function getMockData(code, analysisTime = new Date()) {
   // 종목별 재무 지표 세부화 설정
   const getFinancialData = () => {
     if (code === '006400') {
-      return { bps: 284815, per: 114.64, pbr: 2.13, eps: 5295, roe: 1.98, peerPer: 25.4 };
+      return { bps: 284815, per: 114.64, pbr: 2.13, eps: 5295,  roe:  1.98, peerPer: 25.4 };
     }
     if (code === '009150') {
-      return { bps: 104000, per: 19.8, pbr: 1.48, eps: 7650, roe: 8.2, peerPer: 18.5 };
+      return { bps: 104000, per:  19.80, pbr: 1.48, eps: 7650,  roe:  8.20, peerPer: 18.5 };
+    }
+    if (code === '086520') {
+      // 에코프로: 네이버 금융 2026.08.07 기준
+      return { bps: 44862, per:  -6.02, pbr: 1.92, eps: -14275, roe: -22.64, peerPer: 32.1 };
     }
     return { bps: 43000, per: 12.5, pbr: 1.69, eps: 5800, roe: 13.5, peerPer: 15.2 };
   };

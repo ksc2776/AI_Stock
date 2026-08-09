@@ -24,7 +24,7 @@ function SupplyDemandCard({ data, stockName }) {
 
       <div className="supply-grid">
         <div className="supply-item">
-          <div className="investor-label">외국인 (5일 누적)</div>
+          <div className="investor-label">외국인 (10일 누적)</div>
           <div className={`investor-value ${summary.foreignTotal >= 0 ? 'buy' : 'sell'}`}>
             {summary.foreignTotal >= 0 ? '+' : ''}{formatAmount(summary.foreignTotal)}
           </div>
@@ -34,7 +34,7 @@ function SupplyDemandCard({ data, stockName }) {
         </div>
 
         <div className="supply-item">
-          <div className="investor-label">기관 (5일 누적)</div>
+          <div className="investor-label">기관 (10일 누적)</div>
           <div className={`investor-value ${summary.institutionTotal >= 0 ? 'buy' : 'sell'}`}>
             {summary.institutionTotal >= 0 ? '+' : ''}{formatAmount(summary.institutionTotal)}
           </div>
@@ -44,7 +44,7 @@ function SupplyDemandCard({ data, stockName }) {
         </div>
       </div>
 
-      {/* 최근 5일 동향 */}
+      {/* 최근 10일 동향 */}
       {daily.length > 0 && (
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           {daily.slice(0, 3).map((d, i) => (
