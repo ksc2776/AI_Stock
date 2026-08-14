@@ -128,7 +128,7 @@ function App() {
           score: Math.min(100, Math.max(0, 50 + upside)),
           grade: upside > 15 ? 'Strong Buy' : (upside > 5 ? 'Buy' : (upside < -10 ? 'Sell' : 'Hold')),
           entryPrice: Math.round(currentPrice * 0.97),
-          targetPrice: fairValue || 0,
+          targetPrice: (fairValue !== undefined && fairValue !== null) ? fairValue : 0,
           stopLoss: Math.round(currentPrice * 0.90),
         };
       } else if (serverData?.price) {
