@@ -273,7 +273,7 @@ async function getMockData(code, analysisTime = new Date()) {
     bpsList: [89500, 95500, 101000, 104000, 112000, 121000],
   };
 
-  const targetConsensus = code === '006400' ? sdiConsensus : (code === '009150' ? semcoConsensus : defaultConsensus);
+  const targetConsensus = (code === '006400' || code === '086520') ? sdiConsensus : (code === '009150' ? semcoConsensus : defaultConsensus);
 
   const generateDynamicInvestors = (price, vol) => {
     const baseVol = vol || 1500000;
