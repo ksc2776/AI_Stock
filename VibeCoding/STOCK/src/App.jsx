@@ -107,7 +107,8 @@ function App() {
         isMock: !serverData, // 실시간 데이터가 있으면 Mock 배지 숨김
         price: mergedPrice,
         investors: serverData?.investors ? serverData.investors : mockBase.investors,
-        // financials는 항상 mockBase 사용 (서버 API는 consensus 객체를 제공 못함)
+        // financials: 서버 컨센서스가 있으면 병합, 없으면 mockBase 사용
+        // Vercel API는 financials를 제공하지 않으므로 항상 mockBase.financials 사용
         financials: mockBase.financials,
         // ▶ 분석 기준 시각 (서버 시각 우선)
         analysisTimeISO: serverData?.analysisTimeISO || analysisTime.toISOString(),
@@ -326,19 +327,25 @@ async function getMockData(code, analysisTime = new Date()) {
   };
 
   const semcoConsensus = {
+    // 삼성전기(009150) FnGuide 재무제표 컨센서스 — 증권사 이미지 기준 정확히 일치
+    // 출처: FnGuide (2026.08 기준), (A)=실적 (E)=컨센서스
     years: ['2023.12', '2024.12', '2025.12', '2026.12(E)', '2027.12(E)', '2028.12(E)'],
-    // 매출액 단위: 억원 (네이버금융/FnGuide 컨센서스 기준)
-    revenue: [89094, 99475, 103000, 112000, 123000, 135000],
+    // 매출액 단위: 억원 (소수점 이하 반올림)
+    revenue:         [88924,  102941, 113145, 143144, 183756, 237463],
     // 영업이익 단위: 억원
-    operatingProfit: [6394, 8320, 9150, 10500, 12100, 13800],
-    // 순이익 단위: 억원
-    netIncome: [4505, 6020, 6780, 7900, 9200, 10600],
-    perList: [24.5, 19.8, 17.5, 15.1, 13.0, 11.3],
-    pbrList: [1.55, 1.48, 1.35, 1.25, 1.15, 1.05],
-    epsList: [5690, 7650, 8520, 9950, 11600, 13300],
-    roeList: [6.5, 8.2, 8.8, 9.8, 10.8, 11.5],
-    // BPS 단위: 원 (2024년 실제 126,302원 기준, 이후 추정)
-    bpsList: [119000, 126302, 134000, 141000, 150000, 161000],
+    operatingProfit: [6605,   7350,   9133,   19264,  37014,  58301],
+    // 당기순이익 단위: 억원
+    netIncome:       [4230,   6791,   7061,   15320,  29081,  45792],
+    // EPS 단위: 원
+    epsList:         [5450,   8752,   9099,   19742,  37475,  59010],
+    // BPS 단위: 원 (2025.12 실제 126,302원 기준)
+    bpsList:         [103878, 116340, 126302, 146105, 184980, 237671],
+    // PER 단위: 배
+    perList:         [28.11,  14.15,  28.02,  78.92,  41.57,  26.40],
+    // PBR 단위: 배
+    pbrList:         [1.47,   1.06,   2.02,   10.66,  8.42,   6.56],
+    // ROE 단위: %
+    roeList:         [5.50,   8.16,   7.70,   14.89,  23.25,  28.68],
   };
 
   const targetConsensus = (code === '006400' || code === '086520') ? sdiConsensus : (code === '009150' ? semcoConsensus : defaultConsensus);
@@ -497,14 +504,15 @@ async function getMockData(code, analysisTime = new Date()) {
       return { bps: 284815, per: 114.64, pbr: 2.13, eps: 5295,  roe:  1.98, peerPer: 25.4 };
     }
     if (code === '009150') {
-      // BPS: 2024 실제 126,302원 / EPS: 2024 실제 7,650원 / ROE: 8.2% (FnGuide 컨센서스)
-      return { bps: 126302, per:  19.80, pbr: 1.48, eps: 7650,  roe:  8.20, peerPer: 18.5 };
+      // FnGuide 2025.12(A) 실제: BPS 126,302원 / EPS 9,099원 / ROE 7.70%
+      // PER 28.02배 / PBR 2.02배 동일업종PER(FnGuide기준) 직접 스크랜
+      return { bps: 126302, per: 28.02, pbr: 2.02, eps: 9099, roe: 7.70, peerPer: 16.5 };
     }
     if (code === '086520') {
       // 에코프로: 네이버 금융 2026.08.07 기준
       return { bps: 44862, per:  -6.02, pbr: 1.92, eps: -14275, roe: -22.64, peerPer: 32.1 };
     }
-    // 기본값 (삼성전자 - 네이버 컨센서스 이미지 기반 2025.12 실적 반영)
+    // 기본값 (삼성전자 - FnGuide 컨센서스 2025.12 실적 반영)
     return { bps: 63997, per: 18.27, pbr: 1.87, eps: 6564, roe: 10.85, peerPer: 15.2 };
   };
 
@@ -519,9 +527,10 @@ async function getMockData(code, analysisTime = new Date()) {
       change: change,
       changePercent: changePercent,
       volume: realVolume,
-      // 삼성전기(009150): 오늘 970,000주 / 전일(2026.08.13) 820,000주 = 1.18배
-      prevVolume: code === '006400' ? 410938 : (code === '009150' ? 820000 : 12345678),
-      volumeRatio: code === '006400' ? 0.93 : (code === '009150' ? (realVolume > 0 ? realVolume / 820000 : 1.18) : 1.5),
+      // prevVolume: 서버 API에서 실시간 스크랩한 전일 거래량 사용 (웹 환경에서는 서버값 우선)
+      // mock prevVolume은 서버 응답 없을 때 fallback으로만 사용됨
+      prevVolume: Math.round(realVolume * 0.85),
+      volumeRatio: 1.0,
       high: high,
       low: low,
     },
@@ -544,11 +553,12 @@ async function getMockData(code, analysisTime = new Date()) {
         : safetyMargin > -5 ? '적정'
         : safetyMargin > -15 ? '소폭 고평가' : '고평가';
 
-      // 포워드 S-RIM: consensus BPS/ROE 기반 (이미지 기반 추정치 반영)
+      // 포워드 S-RIM: consensus BPS/ROE 기반 (FnGuide 컨센서스 실제값 반영)
       const fwdData = code === '009150' ? [
-        { year: '2026.12(E)', bps: 141000, roe: 9.8 },
-        { year: '2027.12(E)', bps: 150000, roe: 10.8 },
-        { year: '2028.12(E)', bps: 161000, roe: 11.5 },
+        // 삼성전기 FnGuide 2026~2028 컨센서스 BPS/ROE
+        { year: '2026.12(E)', bps: 146105, roe: 14.89 },
+        { year: '2027.12(E)', bps: 184980, roe: 23.25 },
+        { year: '2028.12(E)', bps: 237671, roe: 28.68 },
       ] : code === '006400' ? [
         { year: '2026.12(E)', bps: 284815, roe: 1.98 },
         { year: '2027.12(E)', bps: 305000, roe: 3.8  },

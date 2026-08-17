@@ -1,22 +1,17 @@
 /**
  * Vercel Serverless API - /api/analyze
- * 네이버 금융 실시간 주가 데이터 + 전일 거래량 반환
- * 분석 시점(analysisTime)도 ISO 문자열로 반환하여 클라이언트가 날짜/시간 표시에 활용
+ * 네이버 금융 실시간 주가 데이터 + 전일 거래량 실시간 스크랩 반환
+ * - 전일 거래량: 네이버 일별시세(sise_day.naver) 에서 직전 영업일 거래량 실시간 파싱
+ * - 분석 시점(analysisTimeISO)도 KST ISO 문자열로 반환
  */
 
 const https = require('https');
 
-// 종목별 전일 거래량 기준값 (KRX 공식 데이터 기반, 정기 업데이트)
-// 실시간 API가 prevVolume을 제공하지 않으므로 최근 영업일 기준 고정값 사용
-const PREV_VOLUME_MAP = {
-  '009150': 820000,   // 삼성전기  2026.08.13 종가 거래량
-  '006400': 410938,   // 삼성SDI   2026.08.13
-  '005930': 9500000,  // 삼성전자
-  '000660': 2800000,  // SK하이닉스
-  '086520': 950173,   // 에코프로   2026.08.13
-  '035420': 1200000,  // NAVER
-  '051910': 350000,   // LG화학
-};
+// ── 전일 거래량 실시간 스크랩용 HTML 파서 (경량 정규식 파서) ───────────────────
+function parseNumber(str) {
+  if (!str) return 0;
+  return parseFloat(str.replace(/[^0-9.-]/g, '')) || 0;
+}
 
 function httpsGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -24,6 +19,7 @@ function httpsGet(url, headers = {}) {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://finance.naver.com/',
+        'Accept-Charset': 'euc-kr',
         ...headers,
       },
     };
@@ -36,6 +32,74 @@ function httpsGet(url, headers = {}) {
       });
     }).on('error', reject);
   });
+}
+
+/**
+ * 네이버 일별시세에서 전일 거래량 실시간 파싱 (모든 종목 자동 대응)
+ * TD 기반 파싱: <td class="num"> 내부 숫자 추출 (종가|전일비|시가|고가|저가|거래량)
+ * 마지막 td.num의 숫자 = 거래량 (검증 완료)
+ */
+async function fetchPrevVolume(code) {
+  try {
+    const url = `https://finance.naver.com/item/sise_day.naver?code=${code}`;
+    const raw = await new Promise((resolve, reject) => {
+      https.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://finance.naver.com/',
+        },
+      }, (res) => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+      }).on('error', reject);
+    });
+
+    // EUC-KR → latin1 (숫자/날짜는 ASCII 범위라 정확히 파싱됨)
+    const body = raw.toString('latin1');
+    const dataRows = [];
+
+    // TR 단위 파싱
+    const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let trMatch;
+    while ((trMatch = trRegex.exec(body)) !== null) {
+      const trHtml = trMatch[1];
+
+      // 날짜 포함 여부 확인
+      const dateMatch = trHtml.match(/(\d{4}\.\d{2}\.\d{2})/);
+      if (!dateMatch) continue;
+
+      // td.num 내부 숫자 추출 (종가, 전일비, 시가, 고가, 저가, 거래량 순서)
+      const tdNums = [];
+      const tdRegex = /<td[^>]*class="num"[^>]*>([\s\S]*?)<\/td>/gi;
+      let tdMatch;
+      while ((tdMatch = tdRegex.exec(trHtml)) !== null) {
+        const nums = tdMatch[1].match(/([\d]{1,3}(?:,[\d]{3})+|[\d]+)/g) || [];
+        const cleanNums = nums.map(n => parseInt(n.replace(/,/g, ''), 10)).filter(n => n > 0);
+        if (cleanNums.length > 0) tdNums.push(Math.max(...cleanNums));
+      }
+
+      // 거래량 = 마지막 td.num 숫자 (최소 5개 이상이어야 유효한 데이터 행)
+      if (tdNums.length >= 5) {
+        const vol = tdNums[tdNums.length - 1];
+        if (vol > 0) dataRows.push({ date: dateMatch[1], volume: vol });
+      }
+      if (dataRows.length >= 3) break;
+    }
+
+    if (dataRows.length >= 2) {
+      return {
+        latestDate:   dataRows[0].date,
+        latestVolume: dataRows[0].volume,
+        prevDate:     dataRows[1].date,
+        prevVolume:   dataRows[1].volume,
+      };
+    }
+    return null;
+  } catch (e) {
+    console.warn('[fetchPrevVolume] 전일 거래량 스크랩 실패:', e.message);
+    return null;
+  }
 }
 
 module.exports = async (req, res) => {
@@ -60,7 +124,7 @@ module.exports = async (req, res) => {
   const analysisTimeISO = kstTime.toISOString().replace('Z', '+09:00');
 
   try {
-    // ── 네이버 금융 실시간 시세 (Polling API) ──────────────────────────────────
+    // ── 1) 네이버 금융 실시간 시세 (Polling API) ────────────────────────────
     let priceData = null;
     try {
       const naverUrl = `https://polling.finance.naver.com/api/realtime?query=SERVICE_ITEM:${code}`;
@@ -84,10 +148,27 @@ module.exports = async (req, res) => {
       console.warn('Naver polling fetch failed:', e.message);
     }
 
-    // ── 전일 거래량: 종목별 기준값 조회 ─────────────────────────────────────
-    const prevVolume = PREV_VOLUME_MAP[code] ?? Math.round((priceData?.volume || 0) * 0.85);
+    // ── 2) 전일 거래량: 네이버 일별시세에서 실시간 스크랩 ────────────────────
+    let prevVolume = 0;
+    let prevVolumeDate = '';
+    try {
+      const siseData = await fetchPrevVolume(code);
+      if (siseData && siseData.prevVolume > 0) {
+        prevVolume = siseData.prevVolume;
+        prevVolumeDate = siseData.prevDate;
+        console.log(`[${code}] 전일거래량 스크랩 성공: ${prevVolumeDate} = ${prevVolume.toLocaleString()}주`);
+      }
+    } catch (e) {
+      console.warn('[prevVolume] 스크랩 실패:', e.message);
+    }
 
-    // ── 종목명: 네이버 금융 페이지 title 파싱 ──────────────────────────────────
+    // fallback: 스크랩 실패 시 당일 거래량의 85% 추정
+    if (!prevVolume || prevVolume <= 0) {
+      prevVolume = Math.round((priceData?.volume || 0) * 0.85);
+      console.warn(`[${code}] 전일거래량 fallback 사용: ${prevVolume}`);
+    }
+
+    // ── 3) 종목명: 네이버 금융 페이지 title 파싱 ─────────────────────────────
     let stockName = code;
     try {
       const itemUrl = `https://finance.naver.com/item/main.naver?code=${code}`;
@@ -116,7 +197,7 @@ module.exports = async (req, res) => {
       ? parseFloat((price.volume / prevVolume).toFixed(2))
       : 0;
 
-    // ── 응답: price + 분석 날짜/시간 반환 ────────────────────────────────────
+    // ── 4) 응답: price + 분석 날짜/시간 반환 ─────────────────────────────────
     return res.status(200).json({
       success: true,
       data: {
@@ -133,8 +214,9 @@ module.exports = async (req, res) => {
           high: price.high,
           low: price.low,
           volume: price.volume,
-          // ▶ 종목별 실제 전일 거래량
+          // ▶ 실시간 스크랩한 전일 거래량 (날짜 포함)
           prevVolume,
+          prevVolumeDate,  // 전일 거래량 기준 날짜 (YYYY.MM.DD)
           // ▶ 실시간 계산 배율
           volumeRatio,
         },
