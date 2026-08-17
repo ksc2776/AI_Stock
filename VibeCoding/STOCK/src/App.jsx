@@ -107,9 +107,12 @@ function App() {
         isMock: !serverData, // 실시간 데이터가 있으면 Mock 배지 숨김
         price: mergedPrice,
         investors: serverData?.investors ? serverData.investors : mockBase.investors,
-        // financials: 서버 컨센서스가 있으면 병합, 없으면 mockBase 사용
-        // Vercel API는 financials를 제공하지 않으므로 항상 mockBase.financials 사용
-        financials: mockBase.financials,
+        // financials: 서버 실시간 FnGuide 컨센서스가 있으면 우선 병합, 없으면 mockBase 사용
+        financials: serverData?.financials ? {
+          ...mockBase.financials,
+          ...serverData.financials,
+          consensus: serverData.financials.consensus || mockBase.financials.consensus,
+        } : mockBase.financials,
         // ▶ 분석 기준 시각 (서버 시각 우선)
         analysisTimeISO: serverData?.analysisTimeISO || analysisTime.toISOString(),
       };
@@ -128,9 +131,13 @@ function App() {
         // 포워드 S-RIM 계산: 종목별 consensus BPS/ROE 기반
         const ke = requiredReturn;
         const fwdData = stockCode === '009150' ? [
-          { year: '2026.12(E)', bps: 141000, roe: 9.8 },
-          { year: '2027.12(E)', bps: 150000, roe: 10.8 },
-          { year: '2028.12(E)', bps: 161000, roe: 11.5 },
+          { year: '2026.12(E)', bps: 146105, roe: 14.89 },
+          { year: '2027.12(E)', bps: 184980, roe: 23.25 },
+          { year: '2028.12(E)', bps: 237671, roe: 28.68 },
+        ] : stockCode === '373220' ? [
+          { year: '2026.12(E)', bps: 88423,  roe: -1.88 },
+          { year: '2027.12(E)', bps: 95224,  roe: 7.62  },
+          { year: '2028.12(E)', bps: 109866, roe: 12.83 },
         ] : stockCode === '006400' ? [
           { year: '2026.12(E)', bps: 284815, roe: 1.98 },
           { year: '2027.12(E)', bps: 305000, roe: 3.8  },
@@ -348,7 +355,24 @@ async function getMockData(code, analysisTime = new Date()) {
     roeList:         [5.50,   8.16,   7.70,   14.89,  23.25,  28.68],
   };
 
-  const targetConsensus = (code === '006400' || code === '086520') ? sdiConsensus : (code === '009150' ? semcoConsensus : defaultConsensus);
+  const lgenConsensus = {
+    // LG에너지솔루션(373220) FnGuide 재무제표 컨센서스 (WiseReport c1050001 공식 기준)
+    years: ['2023.12', '2024.12', '2025.12', '2026.12(E)', '2027.12(E)', '2028.12(E)'],
+    revenue:         [337455, 256196, 236718, 322163, 413328, 497638],
+    operatingProfit: [21632,  5754,   13461,  8254,   38514,  61264],
+    netIncome:       [12372,  -10187, -10728, -3844,  16378,  30789],
+    epsList:         [5287,   -4354,  -4585,  -1643,  6999,   13158],
+    bpsList:         [86328,  90240,  86391,  88423,  95224,  109866],
+    perList:         [80.86,  -79.93, -80.38, -224.91, 52.79, 28.08],
+    pbrList:         [4.95,   3.86,   4.27,   4.18,   3.88,   3.36],
+    roeList:         [6.36,   -4.93,  -5.19,  -1.88,  7.62,   12.83],
+  };
+
+  const targetConsensus = code === '373220'
+    ? lgenConsensus
+    : (code === '006400' || code === '086520')
+      ? sdiConsensus
+      : (code === '009150' ? semcoConsensus : defaultConsensus);
 
   const generateDynamicInvestors = (price, vol) => {
     const baseVol = vol || 1500000;
@@ -511,6 +535,10 @@ async function getMockData(code, analysisTime = new Date()) {
     if (code === '086520') {
       // 에코프로: 네이버 금융 2026.08.07 기준
       return { bps: 44862, per:  -6.02, pbr: 1.92, eps: -14275, roe: -22.64, peerPer: 32.1 };
+    }
+    if (code === '373220') {
+      // LG에너지솔루션: FnGuide 2025.12 기준
+      return { bps: 86391, per: -80.38, pbr: 4.27, eps: -4585, roe: -5.19, peerPer: 30.5 };
     }
     // 기본값 (삼성전자 - FnGuide 컨센서스 2025.12 실적 반영)
     return { bps: 63997, per: 18.27, pbr: 1.87, eps: 6564, roe: 10.85, peerPer: 15.2 };
