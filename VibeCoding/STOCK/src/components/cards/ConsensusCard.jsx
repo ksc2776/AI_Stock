@@ -22,14 +22,11 @@ const SAMSUNG_DEFAULT_CONSENSUS = {
 };
 
 function ConsensusCard({ data, srim, analystReport, stockName }) {
-  const { per, peerPer } = data;
-  // consensus가 객체여야만 사용 (문자열/null/undefined 방어)
-  const rawConsensus = data?.consensus;
-  const consensus = (rawConsensus && typeof rawConsensus === 'object' && rawConsensus.years)
-    ? rawConsensus
-    : SAMSUNG_DEFAULT_CONSENSUS;
+  const { per, peerPer } = data || {};
+  // 전달받은 financials.consensus 사용 (모든 종목의 실시간 또는 종목별 컨센서스)
+  const consensus = data?.consensus || null;
   
-  const hasData = consensus && consensus.years && consensus.years.length > 0;
+  const hasData = Boolean(consensus && consensus.years && consensus.years.length > 0);
 
 
   const years = consensus?.years || [];

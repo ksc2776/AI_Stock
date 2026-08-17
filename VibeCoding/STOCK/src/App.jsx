@@ -124,9 +124,11 @@ function App() {
       const roe = mergedData.financials.roe;
       const requiredReturn = 8.5; // 기대수익률 8.5% 가정
 
-      if (currentPrice > 0 && bps > 0 && roe > 0) {
-        // S-RIM 공식: 적정가 = BPS × (ROE / ke)
-        const fairValue = Math.round(bps * (roe / requiredReturn));
+      if (currentPrice > 0 && bps > 0) {
+        // S-RIM 공식: 적정가 = BPS × (ROE / ke) (단, ROE가 음수일 경우 BPS의 70% 또는 현재가*0.8 반영)
+        const fairValue = roe > 0
+          ? Math.round(bps * (roe / requiredReturn))
+          : Math.round(bps * 0.7);
         
         // 포워드 S-RIM 계산: 종목별 consensus BPS/ROE 기반
         const ke = requiredReturn;
@@ -143,9 +145,9 @@ function App() {
           { year: '2027.12(E)', bps: 305000, roe: 3.8  },
           { year: '2028.12(E)', bps: 330000, roe: 5.5  },
         ] : [
-          { year: '2026.12(E)', bps: bps * 1.05, roe: roe * 1.03 },
-          { year: '2027.12(E)', bps: bps * 1.12, roe: roe * 1.06 },
-          { year: '2028.12(E)', bps: bps * 1.20, roe: roe * 1.09 },
+          { year: '2026.12(E)', bps: bps * 1.05, roe: Math.max(5, roe * 1.03) },
+          { year: '2027.12(E)', bps: bps * 1.12, roe: Math.max(7, roe * 1.06) },
+          { year: '2028.12(E)', bps: bps * 1.20, roe: Math.max(9, roe * 1.09) },
         ];
 
         mergedData.srim = {
@@ -157,7 +159,7 @@ function App() {
           inputs: { bps, roe, requiredReturn, isGlobalTop: false },
           forwardCalculations: fwdData.map(f => ({
             year: f.year,
-            fairValue: Math.round(f.bps * (f.roe / ke)),
+            fairValue: f.roe > 0 ? Math.round(f.bps * (f.roe / ke)) : Math.round(f.bps * 0.8),
           })),
         };
 
