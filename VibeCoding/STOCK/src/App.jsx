@@ -85,16 +85,32 @@ function App() {
       }
 
       // 3) 실시간 데이터와 Mock 데이터 병합
+      // ▶ 서버가 제공한 분석 시각(KST ISO)이 있으면 우선 사용
+      const serverAnalysisTime = serverData?.analysisTimeISO
+        ? new Date(serverData.analysisTimeISO)
+        : analysisTime;
+
+      // price 병합: 서버 값 우선, prevVolume/volumeRatio는 서버 계산값 사용
+      let mergedPrice = mockBase.price;
+      if (serverData?.price) {
+        mergedPrice = {
+          ...mockBase.price,
+          ...serverData.price,
+          // prevVolume/volumeRatio는 서버가 종목별로 계산한 값을 우선
+          prevVolume:  serverData.price.prevVolume  ?? mockBase.price.prevVolume,
+          volumeRatio: serverData.price.volumeRatio ?? mockBase.price.volumeRatio,
+        };
+      }
+
       const mergedData = {
         ...mockBase,
         isMock: !serverData, // 실시간 데이터가 있으면 Mock 배지 숨김
-        price: serverData?.price 
-          ? { ...mockBase.price, ...serverData.price }
-          : mockBase.price,
+        price: mergedPrice,
         investors: serverData?.investors ? serverData.investors : mockBase.investors,
         // financials는 항상 mockBase 사용 (서버 API는 consensus 객체를 제공 못함)
-        // consensus 문자열이 consensus 객체를 덮어쓰는 버그 방지
         financials: mockBase.financials,
+        // ▶ 분석 기준 시각 (서버 시각 우선)
+        analysisTimeISO: serverData?.analysisTimeISO || analysisTime.toISOString(),
       };
 
 
@@ -105,9 +121,25 @@ function App() {
       const requiredReturn = 8.5; // 기대수익률 8.5% 가정
 
       if (currentPrice > 0 && bps > 0 && roe > 0) {
-        // SRIM 공식 적용: 적정가 = BPS * (ROE / 기대수익률)
+        // S-RIM 공식: 적정가 = BPS × (ROE / ke)
         const fairValue = Math.round(bps * (roe / requiredReturn));
         
+        // 포워드 S-RIM 계산: 종목별 consensus BPS/ROE 기반
+        const ke = requiredReturn;
+        const fwdData = stockCode === '009150' ? [
+          { year: '2026.12(E)', bps: 141000, roe: 9.8 },
+          { year: '2027.12(E)', bps: 150000, roe: 10.8 },
+          { year: '2028.12(E)', bps: 161000, roe: 11.5 },
+        ] : stockCode === '006400' ? [
+          { year: '2026.12(E)', bps: 284815, roe: 1.98 },
+          { year: '2027.12(E)', bps: 305000, roe: 3.8  },
+          { year: '2028.12(E)', bps: 330000, roe: 5.5  },
+        ] : [
+          { year: '2026.12(E)', bps: bps * 1.05, roe: roe * 1.03 },
+          { year: '2027.12(E)', bps: bps * 1.12, roe: roe * 1.06 },
+          { year: '2028.12(E)', bps: bps * 1.20, roe: roe * 1.09 },
+        ];
+
         mergedData.srim = {
           ...mergedData.srim,
           fairValueNeutral: fairValue,
@@ -115,21 +147,34 @@ function App() {
           fairValueConservative: Math.round(fairValue * 0.8),
           valuation: currentPrice < fairValue * 0.9 ? '저평가' : (currentPrice > fairValue * 1.1 ? '고평가' : '적정'),
           inputs: { bps, roe, requiredReturn, isGlobalTop: false },
-          forwardCalculations: [
-            { year: '2026.12(E)', fairValue: Math.round(fairValue * 1.05) },
-            { year: '2027.12(E)', fairValue: Math.round(fairValue * 1.15) },
-            { year: '2028.12(E)', fairValue: Math.round(fairValue * 1.25) },
-          ],
+          forwardCalculations: fwdData.map(f => ({
+            year: f.year,
+            fairValue: Math.round(f.bps * (f.roe / ke)),
+          })),
         };
 
-        const upside = ((fairValue / currentPrice) - 1) * 100;
+        // ────────────────────────────────────────────────────────────────────
+        // ActionPlan: 1차 목표가는 증권사 컨센서스 목표가(analystReport) 기반 사용
+        // S-RIM/PER은 고PBR 성장주에서 현재가보다 낮아지는 구조적 문제 → analystTP 우선
+        // ────────────────────────────────────────────────────────────────────
+        const entryPrice    = Math.round(currentPrice * 0.97);
+        const stopLossPrice = Math.round(currentPrice * 0.90);
+
+        // 증권사 컨센서스 목표가 (mergedData에 analystReport가 있으면 사용)
+        const analystTP = mergedData.analystReport?.targetPrice || 0;
+        const minTarget  = Math.round(currentPrice * 1.10);
+
+        // 1차 목표가: 애널리스트 목표가 > 진입가 이면 사용, 아니면 최소 현재가 × 1.10
+        let target1 = analystTP > entryPrice ? analystTP : minTarget;
+
+        const upside = ((target1 / currentPrice) - 1) * 100;
         mergedData.actionPlan = {
           ...mergedData.actionPlan,
-          score: Math.min(100, Math.max(0, 50 + upside)),
-          grade: upside > 15 ? 'Strong Buy' : (upside > 5 ? 'Buy' : (upside < -10 ? 'Sell' : 'Hold')),
-          entryPrice: Math.round(currentPrice * 0.97),
-          targetPrice: (fairValue !== undefined && fairValue !== null) ? fairValue : 0,
-          stopLoss: Math.round(currentPrice * 0.90),
+          score: Math.min(100, Math.max(0, Math.round(50 + upside * 0.5))),
+          grade: upside > 50 ? 'Strong Buy' : (upside > 20 ? 'Buy' : (upside > 5 ? 'Hold' : 'Sell')),
+          entryPrice,
+          targetPrice: target1,
+          stopLoss: stopLossPrice,
         };
       } else if (serverData?.price) {
         // 가격만 있고 재무가 없을 때의 Fallback 계산
@@ -138,8 +183,9 @@ function App() {
         mergedData.actionPlan.targetPrice = Math.round(cp * 1.2);
       }
 
-      // ▶ 분석 완료 시각으로 analyzedAt 갱신
-      mergedData.analyzedAt = new Date().toLocaleString('ko-KR', {
+      // ▶ 분석 완료 시각으로 analyzedAt 갱신 (서버 시각 우선)
+      const finalTime = serverAnalysisTime || new Date();
+      mergedData.analyzedAt = finalTime.toLocaleString('ko-KR', {
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit', second: '2-digit',
         hour12: false,
@@ -231,6 +277,16 @@ async function getMockData(code, analysisTime = new Date()) {
         low = p.low || realPrice;
         if (p.volume) realVolume = p.volume;
       }
+      // ▶ 서버 분석 시각이 있으면 analysisTime을 서버 시각으로 덮어씀
+      // → 투자자 동향/뉴스/리포트 날짜가 서버 기준 날짜로 생성됨
+      if (json?.data?.analysisTimeISO) {
+        try {
+          const serverDate = new Date(json.data.analysisTimeISO);
+          if (!isNaN(serverDate.getTime())) {
+            analysisTime = serverDate;
+          }
+        } catch (_) {}
+      }
     }
   } catch (e) {
     // 실패 시 기본값(Mock) 유지 — 콘솔 에러 출력하지 않음
@@ -238,15 +294,23 @@ async function getMockData(code, analysisTime = new Date()) {
 
 
   const defaultConsensus = {
+    // 삼성전자(005930) FnGuide/네이버금융 컨센서스 — 증권사 이미지 기준 정확히 일치
+    // 출처: FnGuide 재무제표 컨센서스 (2026.08 기준)
     years: ['2023.12', '2024.12', '2025.12', '2026.12(E)', '2027.12(E)', '2028.12(E)'],
-    revenue: [2420000, 2610000, 2750000, 2850000, 3120000, 3350000],
-    operatingProfit: [350000, 385000, 410000, 425000, 520000, 580000],
-    netIncome: [260000, 290000, 310000, 320000, 395000, 445000],
-    perList: [16.2, 15.0, 14.1, 13.2, 11.5, 10.1],
-    pbrList: [1.9, 1.8, 1.7, 1.6, 1.4, 1.3],
-    epsList: [4300, 4800, 5200, 5500, 6300, 7100],
-    roeList: [10.2, 11.1, 11.8, 12.5, 13.8, 14.5],
-    bpsList: [34000, 37000, 40000, 43000, 48500, 55000],
+    // 단위: 억원 (소수점 이하 반올림)
+    revenue:         [2589355, 3008709, 3336059, 7386252, 9438018, 10002422],
+    operatingProfit: [65670,   327260,  436011,  3909276, 5446704,  5438609],
+    netIncome:       [144734,  336214,  442610,  3189808, 4421360,  4467689],
+    // EPS 단위: 원
+    epsList:         [2131,    4950,    6564,    47821,   66500,    67197],
+    // BPS 단위: 원
+    bpsList:         [52002,   57981,   63997,   109367,  169255,   231058],
+    // PER 단위: 배
+    perList:         [36.84,   10.75,   18.27,   5.74,    4.13,     4.09],
+    // PBR 단위: 배
+    pbrList:         [1.51,    0.92,    1.87,    2.51,    1.62,     1.19],
+    // ROE 단위: %
+    roeList:         [4.14,    9.03,    10.85,   55.83,   48.32,    33.98],
   };
 
   const sdiConsensus = {
@@ -263,14 +327,18 @@ async function getMockData(code, analysisTime = new Date()) {
 
   const semcoConsensus = {
     years: ['2023.12', '2024.12', '2025.12', '2026.12(E)', '2027.12(E)', '2028.12(E)'],
+    // 매출액 단위: 억원 (네이버금융/FnGuide 컨센서스 기준)
     revenue: [89094, 99475, 103000, 112000, 123000, 135000],
+    // 영업이익 단위: 억원
     operatingProfit: [6394, 8320, 9150, 10500, 12100, 13800],
+    // 순이익 단위: 억원
     netIncome: [4505, 6020, 6780, 7900, 9200, 10600],
     perList: [24.5, 19.8, 17.5, 15.1, 13.0, 11.3],
     pbrList: [1.55, 1.48, 1.35, 1.25, 1.15, 1.05],
     epsList: [5690, 7650, 8520, 9950, 11600, 13300],
     roeList: [6.5, 8.2, 8.8, 9.8, 10.8, 11.5],
-    bpsList: [89500, 95500, 101000, 104000, 112000, 121000],
+    // BPS 단위: 원 (2024년 실제 126,302원 기준, 이후 추정)
+    bpsList: [119000, 126302, 134000, 141000, 150000, 161000],
   };
 
   const targetConsensus = (code === '006400' || code === '086520') ? sdiConsensus : (code === '009150' ? semcoConsensus : defaultConsensus);
@@ -369,6 +437,15 @@ async function getMockData(code, analysisTime = new Date()) {
     date: reportDate,
   };
 
+  // ▶ 삼성전기(009150) 전용 애널리스트 리포트
+  // 출처: 모건스탠리 2026.08 Top Pick, 목표주가 2,620,000원
+  const semcoAnalystReport = {
+    title: 'AI 서버·전장용 MLCC·FC-BGA 폭발적 수요, Top Pick 유지',
+    broker: '모건스탠리',
+    targetPrice: 2620000,
+    date: reportDate,
+  };
+
   const sdiAnalystReport = {
     title: 'AIDC향 ESS의 중장기적인 성장성 확보',
     broker: 'iM증권',
@@ -386,6 +463,7 @@ async function getMockData(code, analysisTime = new Date()) {
 
   const targetAnalystReport = code === '006400' ? sdiAnalystReport
     : code === '086520' ? ecoproAnalystReport
+    : code === '009150' ? semcoAnalystReport
     : defaultAnalystReport;
 
   const foreignTotal = targetInvestors.summary.foreignTotal;
@@ -419,13 +497,15 @@ async function getMockData(code, analysisTime = new Date()) {
       return { bps: 284815, per: 114.64, pbr: 2.13, eps: 5295,  roe:  1.98, peerPer: 25.4 };
     }
     if (code === '009150') {
-      return { bps: 104000, per:  19.80, pbr: 1.48, eps: 7650,  roe:  8.20, peerPer: 18.5 };
+      // BPS: 2024 실제 126,302원 / EPS: 2024 실제 7,650원 / ROE: 8.2% (FnGuide 컨센서스)
+      return { bps: 126302, per:  19.80, pbr: 1.48, eps: 7650,  roe:  8.20, peerPer: 18.5 };
     }
     if (code === '086520') {
       // 에코프로: 네이버 금융 2026.08.07 기준
       return { bps: 44862, per:  -6.02, pbr: 1.92, eps: -14275, roe: -22.64, peerPer: 32.1 };
     }
-    return { bps: 43000, per: 12.5, pbr: 1.69, eps: 5800, roe: 13.5, peerPer: 15.2 };
+    // 기본값 (삼성전자 - 네이버 컨센서스 이미지 기반 2025.12 실적 반영)
+    return { bps: 63997, per: 18.27, pbr: 1.87, eps: 6564, roe: 10.85, peerPer: 15.2 };
   };
 
   const currentFinancials = getFinancialData();
@@ -439,8 +519,9 @@ async function getMockData(code, analysisTime = new Date()) {
       change: change,
       changePercent: changePercent,
       volume: realVolume,
-      prevVolume: code === '006400' ? 410938 : 12345678,
-      volumeRatio: code === '006400' ? 0.93 : 1.5,
+      // 삼성전기(009150): 오늘 970,000주 / 전일(2026.08.13) 820,000주 = 1.18배
+      prevVolume: code === '006400' ? 410938 : (code === '009150' ? 820000 : 12345678),
+      volumeRatio: code === '006400' ? 0.93 : (code === '009150' ? (realVolume > 0 ? realVolume / 820000 : 1.18) : 1.5),
       high: high,
       low: low,
     },
@@ -449,25 +530,62 @@ async function getMockData(code, analysisTime = new Date()) {
       ...currentFinancials,
       consensus: targetConsensus,
     },
-    srim: {
-      fairValueOptimistic: Math.round(realPrice * 1.3),
-      fairValueConservative: Math.round(realPrice * 0.9),
-      fairValueNeutral: Math.round(realPrice * 1.1),
-      safetyMargin: 7.93,
-      upside: 41.38,
-      valuation: '소폭 저평가',
-      inputs: { bps: currentFinancials.bps, roe: currentFinancials.roe, requiredReturn: 8, isGlobalTop: false },
-      forwardCalculations: [
-        { year: '2026.12', fairValue: Math.round(realPrice * 1.1) },
-        { year: '2027.12', fairValue: Math.round(realPrice * 1.2) },
-        { year: '2028.12', fairValue: Math.round(realPrice * 1.3) },
-      ],
-    },
+    srim: (() => {
+      const bps  = currentFinancials.bps;
+      const roe  = currentFinancials.roe;
+      const ke   = 8; // 요구수익률 8% (보수적)
+      // S-RIM 기본 공식: 적정가 = BPS × (ROE / ke)
+      const fairValueNeutral      = bps > 0 && roe > 0 ? Math.round(bps * (roe / ke)) : Math.round(realPrice * 1.1);
+      const fairValueOptimistic   = Math.round(fairValueNeutral * 1.2);
+      const fairValueConservative = Math.round(fairValueNeutral * 0.8);
+      const safetyMargin = realPrice > 0 ? ((fairValueNeutral / realPrice) - 1) * 100 : 7.93;
+      const valuation = safetyMargin > 15 ? '강력 저평가'
+        : safetyMargin > 5  ? '저평가'
+        : safetyMargin > -5 ? '적정'
+        : safetyMargin > -15 ? '소폭 고평가' : '고평가';
+
+      // 포워드 S-RIM: consensus BPS/ROE 기반 (이미지 기반 추정치 반영)
+      const fwdData = code === '009150' ? [
+        { year: '2026.12(E)', bps: 141000, roe: 9.8 },
+        { year: '2027.12(E)', bps: 150000, roe: 10.8 },
+        { year: '2028.12(E)', bps: 161000, roe: 11.5 },
+      ] : code === '006400' ? [
+        { year: '2026.12(E)', bps: 284815, roe: 1.98 },
+        { year: '2027.12(E)', bps: 305000, roe: 3.8  },
+        { year: '2028.12(E)', bps: 330000, roe: 5.5  },
+      ] : [
+        { year: '2026.12(E)', bps: 109367, roe: 55.83 },
+        { year: '2027.12(E)', bps: 169255, roe: 48.32 },
+        { year: '2028.12(E)', bps: 231058, roe: 33.98 },
+      ];
+
+      return {
+        fairValueOptimistic,
+        fairValueConservative,
+        fairValueNeutral,
+        safetyMargin: parseFloat(safetyMargin.toFixed(2)),
+        upside: parseFloat(safetyMargin.toFixed(2)),
+        valuation,
+        inputs: { bps, roe, requiredReturn: ke, isGlobalTop: false },
+        // consensus years의 (E) 포함 표기와 정확히 일치
+        forwardCalculations: fwdData.map(f => ({
+          year: f.year,
+          fairValue: Math.round(f.bps * (f.roe / ke)),
+        })),
+      };
+    })(),
     actionPlan: {
       score: 78,
       grade: changePercent > 0 ? 'Buy' : 'Wait',
-      entryPrice: Math.round(realPrice * 0.98),
-      targetPrice: Math.round(realPrice * 1.15),
+      // 1차 목표가: 증권사 컨센서스 목표가 기반 (analystReport.targetPrice)
+      // → 반드시 진입가(현재가×0.97)보다 높아야 함
+      entryPrice: Math.round(realPrice * 0.97),
+      targetPrice: (() => {
+        const analystTP = targetAnalystReport?.targetPrice || 0;
+        const minTarget  = Math.round(realPrice * 1.10);
+        // 애널리스트 목표가가 진입가보다 높으면 사용, 아니면 현재가 × 1.10
+        return analystTP > Math.round(realPrice * 0.97) ? analystTP : minTarget;
+      })(),
       stopLoss: Math.round(realPrice * 0.85),
       trendComment: trendComment,
       sentimentComment: sentimentComment,

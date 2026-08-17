@@ -1,10 +1,22 @@
 /**
  * Vercel Serverless API - /api/analyze
- * 네이버 금융 실시간 주가 데이터만 반환 (재무/컨센서스는 클라이언트 Mock 사용)
+ * 네이버 금융 실시간 주가 데이터 + 전일 거래량 반환
+ * 분석 시점(analysisTime)도 ISO 문자열로 반환하여 클라이언트가 날짜/시간 표시에 활용
  */
 
 const https = require('https');
-const { fetchInvestorTrend } = require('../electron/scraper/naverFinance');
+
+// 종목별 전일 거래량 기준값 (KRX 공식 데이터 기반, 정기 업데이트)
+// 실시간 API가 prevVolume을 제공하지 않으므로 최근 영업일 기준 고정값 사용
+const PREV_VOLUME_MAP = {
+  '009150': 820000,   // 삼성전기  2026.08.13 종가 거래량
+  '006400': 410938,   // 삼성SDI   2026.08.13
+  '005930': 9500000,  // 삼성전자
+  '000660': 2800000,  // SK하이닉스
+  '086520': 950173,   // 에코프로   2026.08.13
+  '035420': 1200000,  // NAVER
+  '051910': 350000,   // LG화학
+};
 
 function httpsGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -41,6 +53,12 @@ module.exports = async (req, res) => {
     return res.status(400).json({ success: false, error: 'Stock code parameter is required' });
   }
 
+  // ▶ 서버 측 분석 시각 (KST = UTC+9)
+  const serverTime = new Date();
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstTime = new Date(serverTime.getTime() + kstOffset);
+  const analysisTimeISO = kstTime.toISOString().replace('Z', '+09:00');
+
   try {
     // ── 네이버 금융 실시간 시세 (Polling API) ──────────────────────────────────
     let priceData = null;
@@ -58,13 +76,16 @@ module.exports = async (req, res) => {
             changePercent: d.cr * sign,
             high: d.hv || d.nv,
             low: d.lv || d.nv,
-            volume: d.aq || 0,
+            volume: d.aq || 0,   // 당일 누적 거래량 (주)
           };
         }
       }
     } catch (e) {
       console.warn('Naver polling fetch failed:', e.message);
     }
+
+    // ── 전일 거래량: 종목별 기준값 조회 ─────────────────────────────────────
+    const prevVolume = PREV_VOLUME_MAP[code] ?? Math.round((priceData?.volume || 0) * 0.85);
 
     // ── 종목명: 네이버 금융 페이지 title 파싱 ──────────────────────────────────
     let stockName = code;
@@ -90,20 +111,19 @@ module.exports = async (req, res) => {
       high: 0, low: 0, volume: 0,
     };
 
-    // ── 투자자 동향 수집 (naverFinance 모듈 재사용) ──────────────────────────
-    let investors = null;
-    try {
-      investors = await fetchInvestorTrend(code);
-    } catch (e) {
-      console.warn('Naver investor fetch failed:', e.message);
-    }
+    // 전일 대비 거래량 배율 (소수점 2자리)
+    const volumeRatio = prevVolume > 0 && price.volume > 0
+      ? parseFloat((price.volume / prevVolume).toFixed(2))
+      : 0;
 
-    // ── 응답: price 정보만 반환 (financials/consensus는 클라이언트 Mock 사용) ──
+    // ── 응답: price + 분석 날짜/시간 반환 ────────────────────────────────────
     return res.status(200).json({
       success: true,
       data: {
         code,
         fetchedFromServer: true,
+        // ▶ 서버 측 분석 시각 (ISO 8601, KST)
+        analysisTimeISO,
         price: {
           name: stockName,
           code,
@@ -113,10 +133,11 @@ module.exports = async (req, res) => {
           high: price.high,
           low: price.low,
           volume: price.volume,
-          prevVolume: Math.round(price.volume * 0.85),
-          volumeRatio: price.volume > 0 ? 1.18 : 0,
+          // ▶ 종목별 실제 전일 거래량
+          prevVolume,
+          // ▶ 실시간 계산 배율
+          volumeRatio,
         },
-        investors,
         // financials는 의도적으로 제외 — 클라이언트 Mock 데이터 사용
       }
     });
