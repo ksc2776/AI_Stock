@@ -119,8 +119,7 @@ function ThemeMarketCard() {
   const [selectedThemeId, setSelectedThemeId] = useState('');
   const [themeData, setThemeData] = useState(null);
   const [loading, setLoading] = useState(false);
-
-
+  const [fetchedDate, setFetchedDate] = useState('');
 
   // 컴포넌트 마운트 시 테마 목록 가져오기
   useEffect(() => {
@@ -146,11 +145,27 @@ function ThemeMarketCard() {
     fetchThemes();
   }, []);
 
+  /**
+   * Yahoo Finance /api/us-stocks 엔드포인트 호출
+   * KST 기준 검색 일자 반환
+   */
+  const fetchYahooStocks = async (tickers) => {
+    const symbolsParam = tickers.join(',');
+    const apiBase = import.meta.env.VITE_API_BASE || '';
+    const url = `${apiBase}/api/us-stocks?symbols=${encodeURIComponent(symbolsParam)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`us-stocks API error: ${res.status}`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'us-stocks failed');
+    return json.data;
+  };
+
   // 테마 변경 시 테마 데이터(주가+뉴스) 가져오기
   useEffect(() => {
     if (!selectedThemeId) {
       setThemeData(null);
       setLoading(false);
+      setFetchedDate('');
       return;
     }
     
@@ -163,23 +178,40 @@ function ThemeMarketCard() {
             setThemeData(result.data);
           }
         } else {
-          // 브라우저 Mock 데이터 환경
-          await new Promise(r => setTimeout(r, 600));
+          // ── 브라우저 환경: Yahoo Finance 실시간 주가 + Mock 뉴스 ──
           const selectedTheme = GICS_THEMES.find(t => t.id === parseInt(selectedThemeId));
-          
-          const mockStocks = selectedTheme.tickers.map(ticker => {
-            const stockNameStr = selectedTheme.stocks.find(s => s.includes(ticker)) || ticker;
-            return {
-              ticker: ticker,
-              nameStr: stockNameStr,
-              price: Math.floor(Math.random() * 500) + 100,
-              change: (Math.random() * 10).toFixed(2),
-              changePercent: ((Math.random() * 5) * (Math.random() > 0.4 ? 1 : -1))
-            };
-          });
-          const avgChange = mockStocks.reduce((acc, cur) => acc + cur.changePercent, 0) / mockStocks.length;
 
-          // 2개의 팩트 이슈
+          // 1) Yahoo Finance 실시간 시세 호출
+          let liveStocks = [];
+          let avgChange = 0;
+          let kstDate = '';
+          try {
+            const yahooData = await fetchYahooStocks(selectedTheme.tickers);
+            kstDate = yahooData.fetchedDate || '';
+            setFetchedDate(kstDate);
+            liveStocks = yahooData.stocks.map(s => {
+              const stockNameStr = selectedTheme.stocks.find(st => st.includes(s.ticker)) || s.ticker;
+              return {
+                ticker: s.ticker,
+                nameStr: stockNameStr,
+                price: s.price,
+                change: s.change,
+                changePercent: s.changePercent,
+                currency: s.currency || 'USD',
+                error: s.error,
+              };
+            });
+            avgChange = yahooData.avgChangePercent;
+          } catch (e) {
+            console.error('[ThemeMarket] Yahoo Finance 주가 로딩 실패:', e.message);
+            // fallback: 에러 표시용 빈 데이터
+            liveStocks = selectedTheme.tickers.map(ticker => {
+              const stockNameStr = selectedTheme.stocks.find(s => s.includes(ticker)) || ticker;
+              return { ticker, nameStr: stockNameStr, price: null, change: null, changePercent: null, currency: 'USD', error: 'fetch_failed' };
+            });
+          }
+
+          // 2) 팩트 이슈
           const factIssues = selectedTheme.issues.map((issue, index) => ({
             title: `📌 [핵심 팩트] ${issue.title}`,
             detail: issue.detail,
@@ -283,7 +315,7 @@ function ThemeMarketCard() {
             market: {
               theme: selectedTheme,
               avgChangePercent: avgChange,
-              stocks: mockStocks
+              stocks: liveStocks
             },
             news: [...factIssues, ...mockNews]
           });
@@ -357,27 +389,40 @@ function ThemeMarketCard() {
         </div>
       ) : themeData ? (
         <div className="theme-content animate-fade-in">
+          {/* KST 기준 시세 조회 일자 표시 */}
+          {fetchedDate && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px', textAlign: 'right' }}>
+              📅 시세 기준일 (KST): <strong>{fetchedDate}</strong>
+            </div>
+          )}
           {/* 미니 지수 (대표 5종목 가로 스크롤) */}
           <div className="theme-index">
             <div className="theme-avg">
               <span className="avg-label">테마 평균 동향</span>
-              <span className={`avg-val ${themeData.market.avgChangePercent >= 0 ? 'text-up' : 'text-down'}`}>
-                {themeData.market.avgChangePercent > 0 ? '+' : ''}{themeData.market.avgChangePercent.toFixed(2)}%
+              <span className={`avg-val ${(themeData.market.avgChangePercent ?? 0) >= 0 ? 'text-up' : 'text-down'}`}>
+                {(themeData.market.avgChangePercent ?? 0) > 0 ? '+' : ''}{(themeData.market.avgChangePercent ?? 0).toFixed(2)}%
               </span>
             </div>
             <div className="theme-stocks-scroll">
               {themeData.market.stocks.map(s => {
-                const isUp = s.changePercent >= 0;
+                const cp = s.changePercent;
+                const isUp = cp != null ? cp >= 0 : true;
+                const hasData = s.price != null && !s.error;
                 return (
-                  <div key={s.ticker} className={`theme-stock-badge-item ${isUp ? 'badge-up' : 'badge-down'}`}>
+                  <div key={s.ticker} className={`theme-stock-badge-item ${hasData ? (isUp ? 'badge-up' : 'badge-down') : 'badge-neutral'}`}>
                     <div className="ts-badge-info">
                       <span className="ts-badge-name">{s.nameStr.split(' (')[0]}</span>
                       <span className="ts-badge-ticker">{s.ticker}</span>
                     </div>
                     <div className="ts-badge-price-change">
-                      <span className="ts-badge-price">${s.price > 0 ? s.price.toFixed(2) : '---'}</span>
+                      <span className="ts-badge-price">
+                        {hasData ? `$${Number(s.price).toFixed(2)}` : '---'}
+                      </span>
                       <span className="ts-badge-percent">
-                        {isUp ? '▲' : '▼'} {Math.abs(s.changePercent).toFixed(2)}%
+                        {hasData
+                          ? `${isUp ? '▲' : '▼'} ${Math.abs(cp).toFixed(2)}%`
+                          : (s.error === 'fetch_failed' ? '⚠ 조회실패' : '--')
+                        }
                       </span>
                     </div>
                   </div>

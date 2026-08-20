@@ -100,8 +100,40 @@ function apiAnalyzePlugin() {
   };
 }
 
+function apiUsStocksPlugin() {
+  return {
+    name: 'api-us-stocks',
+    configureServer(server) {
+      server.middlewares.use('/api/us-stocks', async (req, res, next) => {
+        try {
+          // require cache 초기화로 핫 리로드 지원
+          const apiPath = path.resolve('./api/us-stocks.js');
+          delete require.cache[apiPath];
+          const usStocksFn = require(apiPath);
+          const url = new URL(req.url, `http://${req.headers.host}`);
+          req.query = Object.fromEntries(url.searchParams);
+
+          res.status = (code) => { res.statusCode = code; return res; };
+          res.json = (obj) => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(obj));
+          };
+
+          await usStocksFn(req, res);
+        } catch (e) {
+          console.error('[us-stocks plugin] Error:', e);
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: e.message }));
+        }
+      });
+    }
+  };
+}
+
+
 export default defineConfig({
-  plugins: [react(), exportReportPlugin(), apiAnalyzePlugin()],
+  plugins: [react(), exportReportPlugin(), apiAnalyzePlugin(), apiUsStocksPlugin()],
   base: '/',
   server: {
     host: true,
@@ -120,3 +152,4 @@ export default defineConfig({
     emptyOutDir: true,
   },
 });
+

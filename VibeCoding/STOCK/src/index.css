@@ -1398,6 +1398,11 @@ body::before {
   border-left: 3px solid var(--color-down);
 }
 
+.theme-stock-badge-item.badge-neutral {
+  border-left: 3px solid rgba(255,255,255,0.2);
+  opacity: 0.6;
+}
+
 .ts-badge-info {
   display: flex;
   flex-direction: column;
@@ -1435,6 +1440,7 @@ body::before {
 
 .badge-down .ts-badge-percent {
   color: var(--color-down);
+
 }
 
 /* Global News & Fact Items */
